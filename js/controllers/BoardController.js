@@ -1,341 +1,497 @@
-class BoardController {
-    constructor(board, mouseController, keyboardController) {
-        this.board = board;
-        this.mouse = mouseController;
-        this.keyboard = keyboardController;
+/* ============================================
+   LOUSA VIRTUAL - BoardController
+   ============================================
+   Controller principal: orquestra paginas, zoom,
+   historico (undo/redo), persistencia (localStorage
+   e import/export), tema, orientacao e biblioteca.
+   Conecta todos os demais controllers e views.
+   ============================================ */
 
-        this.mathRenderer = new MathRenderer();
-        this.textRenderer = new TextRenderer();
-        this.svgRenderer = new SVGRenderer();
+import { MathObject } from '../models/MathObject.js';
+import { TextObject } from '../models/TextObject.js';
+import { ImageObject } from '../models/ImageObject.js';
 
-        this.currentTool = 'select';
-        this.modalOverlay = document.getElementById('modal-overlay');
-        this.modalInput = document.getElementById('modal-input');
-        this.modalPreview = document.getElementById('modal-preview');
-        this.modalTitle = document.getElementById('modal-title');
-        this.modalLabel = document.getElementById('modal-label');
-        this.modalConfirm = document.getElementById('modal-confirm');
-        this.modalCancel = document.getElementById('modal-cancel');
-        this.modalClose = document.getElementById('modal-close');
-        this.contextMenu = document.getElementById('context-menu');
+export class BoardController {
+  constructor(board, boardView, toolbar, mathEditor,
+    toolController, mouseController, objectController, selectionView, $) {
+    this.board = board;
+    this.boardView = boardView;
+    this.toolbar = toolbar;
+    this.mathEditor = mathEditor;
+    this.toolController = toolController;
+    this.mouseController = mouseController;
+    this.objectController = objectController;
+    this.selectionView = selectionView;
+    this.$ = $;
 
-        this._modalResolve = null;
-        this._editingObject = null;
-    }
+    this.STORAGE_KEY = 'lousa-state';
+  }
 
-    init() {
-        this.mouse.init();
-        this.keyboard.init();
+  #prevSizes = null;
 
-        this.mouse.on('boardClick', (data) => this._onBoardClick(data));
-        this.mouse.on('objectDoubleClick', (obj) => this._onObjectDoubleClick(obj));
-        this.mouse.on('contextMenu', (data) => this._onContextMenu(data));
+  init() {
+    this._loadState();
+    if (this.board.pages.length === 0) this.addPage();
 
-        this.keyboard.on('deleteSelected', () => this._deleteSelected());
-        this.keyboard.on('escape', () => this._onEscape());
-        this.keyboard.on('toolChange', (tool) => this.setTool(tool));
+    this._setupCanvasResize();
+    this._bindViews();
+    this._setupZoomWheel();
+    this._setupExport();
+    this._setupImageUpload();
+    this._setupDragDrop();
 
-        this.modalConfirm.addEventListener('click', () => this._modalConfirm());
-        this.modalCancel.addEventListener('click', () => this._modalCancel());
-        this.modalClose.addEventListener('click', () => this._modalCancel());
-        this.modalInput.addEventListener('input', () => this._onInputPreview());
+    this.renderPagesList();
+    this.renderLibrary();
+    this._switchPage(this.board.currentPageIndex);
+    this._applyTheme();
+  }
 
-        this.modalOverlay.addEventListener('click', (e) => {
-            if (e.target === this.modalOverlay) this._modalCancel();
-        });
+  /** Interligacao entre controllers/views. */
+  _bindViews() {
+    const board = this.board;
+    const bv = this.boardView;
 
-        document.addEventListener('click', () => this._hideContextMenu());
-        document.querySelectorAll('.context-menu__item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                const action = e.target.dataset.action;
-                this._handleContextAction(action);
-            });
-        });
+    this.toolbar.onToggleDark = () => this.toggleDarkMode();
+    this.toolbar.onToggleLandscape = () => this.toggleLandscape();
+    this.toolbar.onAddPage = () => this.addPage();
+    this.toolbar.onClearPage = () => this.clearPage();
+    this.toolbar.onToggleLibrary = () => this.toggleLibrary(true);
+    this.toolbar.onCloseLibrary = () => this.toggleLibrary(false);
+    this.toolbar.onHelp = () => this.openHelp();
+    this.toolbar.onExport = () => this.openExport();
 
-        this._initToolbar();
-    }
+    // Ferramentas que abrem modais/imagens
+    this.toolController.onRequestEquation = () => this.objectController.openEquationModal();
+    this.toolController.onRequestGraph = () => this.objectController.openGraphModal();
+    this.toolController.onRequestImage = () => this.$.imageUpload.click();
+    this.toolController.onUndo = () => this.undo();
+    this.toolController.onRedo = () => this.redo();
+    this.toolController.onDeleteSelected = () => this.objectController.handleDeleteSelected();
+    this.toolController.onEscape = () => this.handleEscape();
 
-    _initToolbar() {
-        const buttons = document.querySelectorAll('.toolbar__btn[data-tool]');
-        buttons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.setTool(btn.dataset.tool);
-            });
-        });
-    }
+    // Object controller
+    this.objectController.onCommit = () => this.commitHistory();
+    this.objectController.onPersist = () => this._saveState();
 
-    setTool(tool) {
-        this.currentTool = tool;
-        document.querySelectorAll('.toolbar__btn[data-tool]').forEach(btn => {
-            btn.classList.toggle('toolbar__btn--active', btn.dataset.tool === tool);
-        });
+    // Mouse
+    this.mouseController.onStrokeEnd = () => this.commitHistory();
 
-        const board = this.board.element;
-        board.className = 'board';
-        board.classList.add('board--tool-' + tool);
-    }
+    // Selection
+    this.selectionView.onDeleteObject = (obj) => {
+      this.boardView.removeObjectElement(obj);
+      this.board.removeObject(obj);
+      this.commitHistory();
+    };
+    this.selectionView.onEditEquation = (obj) => this.objectController.openEquationModal(obj);
+    this.selectionView.onCommitChange = () => this.commitHistory();
 
-    _onBoardClick(data) {
-        const tool = this.currentTool;
+    // Biblioteca
+    this.$.saveToLibraryBtn.addEventListener('click', () => {
+      this.mathEditor.open('', (latex) => {
+        this.objectController.saveToLibrary(latex);
+        this.renderLibrary();
+        this.showToast('Equacao salva na biblioteca');
+      });
+    });
+    this.$.librarySearchInput.addEventListener('input', () => this.renderLibrary());
 
-        switch (tool) {
-            case 'select':
-                this.board.deselectAll();
-                break;
-            case 'math':
-                this._createMathObject(data.x, data.y);
-                break;
-            case 'text':
-                this._createTextObject(data.x, data.y);
-                break;
-            case 'image':
-                this._promptImageURL(data.x, data.y);
-                break;
-            case 'triangle':
-            case 'circle':
-            case 'rectangle':
-                this._createShapeObject(tool, data.x, data.y);
-                break;
+    // Insert grafico
+    this.$.insertGraphBtn.addEventListener('click', () => {
+      this.objectController.insertGraph();
+      this.renderLibrary();
+      this.showToast('Grafico inserido');
+    });
+
+    // Modais (fechar)
+    document.querySelectorAll('.close-modal-btn').forEach(btn => {
+      btn.addEventListener('click', () => btn.closest('.modal').classList.add('hidden'));
+    });
+    document.querySelectorAll('.modal').forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.classList.contains('modal-backdrop')) {
+          modal.classList.add('hidden');
         }
+      });
+    });
+  }
+
+  /* ---- Canvas resize ---- */
+  _setupCanvasResize() {
+    const resize = () => {
+      const rect = this.$.whiteboard.getBoundingClientRect();
+      this.boardView.canvas.width = rect.width;
+      this.boardView.canvas.height = rect.height;
+      const page = this.board.currentPage;
+      if (page && page.drawingData) this.boardView.drawBackground(page.drawingData);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+  }
+
+  /* ---- Zoom (scroll) ---- */
+  _setupZoomWheel() {
+    document.addEventListener('wheel', (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        this.toolController.changeZoom(e.deltaY > 0 ? -0.05 : 0.05);
+      }
+    }, { passive: false });
+  }
+
+  /* ---- Paginas ---- */
+  addPage(name = null) {
+    const page = {
+      id: Date.now(),
+      name: name || `Pagina ${this.board.pages.length + 1}`,
+      drawingData: null,
+      elements: [],
+      objects: [],
+      orientation: this.board.isLandscape ? 'landscape' : 'portrait'
+    };
+    this.board.pages.push(page);
+    this.renderPagesList();
+    return page;
+  }
+
+  _switchPage(index) {
+    if (index < 0 || index >= this.board.pages.length) return;
+    this._saveCurrentPage();
+    this.board.currentPageIndex = index;
+
+    const page = this.board.pages[index];
+    this.board.isLandscape = page.orientation === 'landscape';
+    this.boardView.setOrientation(this.board.isLandscape);
+    this.toolbar.setLandscapeActive(this.board.isLandscape);
+
+    // Limpa canvas e objetos da view
+    this.boardView.clearCanvas();
+    this.board.clear();
+    this.boardView.clearLayer();
+
+    if (page.drawingData) this.boardView.drawBackground(page.drawingData);
+    page.elements.forEach(el => this._restoreFromSerialized(el));
+    this._saveState();
+    this.renderPagesList();
+  }
+
+  deletePage(index) {
+    if (this.board.pages.length <= 1) {
+      this.showToast('Nao e possivel remover a unica pagina');
+      return;
+    }
+    this.board.pages.splice(index, 1);
+    if (this.board.currentPageIndex >= this.board.pages.length) {
+      this.board.currentPageIndex = this.board.pages.length - 1;
+    }
+    this._switchPage(this.board.currentPageIndex);
+    this.renderPagesList();
+    this.showToast('Pagina removida');
+  }
+
+  _saveCurrentPage() {
+    const page = this.board.currentPage;
+    if (!page) return;
+    page.drawingData = this.boardView.canvas.toDataURL();
+    page.elements = this.board.objects.map(o => o.toJSON());
+    page.objects = page.elements;
+    this._saveState();
+  }
+
+  _restoreFromSerialized(data) {
+    // Reconstroi o objeto de modelo a partir do JSON serializado
+    let obj = null;
+    switch (data.type) {
+      case 'equation':
+        obj = MathObject.fromJSON(data);
+        break;
+      case 'text':
+        obj = TextObject.fromJSON(data);
+        break;
+      case 'image':
+      case 'graph':
+        obj = ImageObject.fromJSON(data);
+        break;
+      default:
+        return;
+    }
+    this.board.addObject(obj);
+    this.boardView.addObjectElement(obj);
+  }
+
+  /* ---- Renderizacao de paginas --- */
+  renderPagesList() {
+    const list = this.$.pagesList;
+    list.innerHTML = '';
+    this.board.pages.forEach((page, i) => {
+      const item = document.createElement('div');
+      item.className = `page-item ${i === this.board.currentPageIndex ? 'active' : ''}`;
+      item.innerHTML = `
+        <div class="page-thumb"><img src="${page.drawingData || ''}" alt=""></div>
+        <div class="page-info">
+          <div class="page-name">${page.name}</div>
+          <div class="page-number">Pagina ${i + 1}</div>
+        </div>
+        <button class="page-delete-btn" data-index="${i}" title="Remover">&times;</button>
+      `;
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.page-delete-btn')) return;
+        this._switchPage(i);
+      });
+      item.querySelector('.page-delete-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.deletePage(i);
+      });
+      list.appendChild(item);
+    });
+  }
+
+  /* ---- Limpar pagina ---- */
+  clearPage() {
+    if (!confirm('Limpar toda a pagina?')) return;
+    this.board.clear();
+    this.boardView.clearCanvas();
+    this.boardView.clearLayer();
+    this.commitHistory();
+    this.showToast('Pagina limpa');
+  }
+
+  /* ---- Biblioteca ---- */
+  renderLibrary() {
+    const list = this.$.libraryList;
+    const query = this.$.librarySearchInput.value || '';
+    list.innerHTML = '';
+    const filtered = this.objectController.searchLibrary(query);
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<p style="padding:24px;color:var(--text-muted);font-size:12px;text-align:center">Nenhuma equacao salva</p>';
+      return;
     }
 
-    _onObjectDoubleClick(obj) {
-        if (obj.type === 'math') {
-            this._editMathObject(obj);
-        } else if (obj.type === 'text') {
-            this._editTextObject(obj);
+    filtered.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'library-item';
+      div.innerHTML = `<button class="lib-delete" data-id="${item.id}">&times;</button><div class="lib-label">${item.label}</div>`;
+      try { window.katex.render(item.latex, div, { displayMode: true, throwOnError: false }); } catch {}
+      div.addEventListener('click', (e) => {
+        if (!e.target.closest('.lib-delete')) this.objectController.createEquation(item.latex);
+      });
+      div.querySelector('.lib-delete').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.objectController.removeFromLibrary(item.id);
+        this.renderLibrary();
+        this.showToast('Equacao removida');
+      });
+      list.appendChild(div);
+    });
+  }
+
+  /* ---- Historia ---- */
+  commitHistory() {
+    this.board.pushHistory();
+  }
+
+  undo() {
+    if (this.board.historyIndex <= 0) return;
+    this.board.historyIndex--;
+    this._restoreHistory(this.board.history[this.board.historyIndex]);
+    this.showToast('Desfeito');
+  }
+
+  redo() {
+    if (this.board.historyIndex >= this.board.history.length - 1) return;
+    this.board.historyIndex++;
+    this._restoreHistory(this.board.history[this.board.historyIndex]);
+    this.showToast('Refito');
+  }
+
+  _restoreHistory(snapshot) {
+    if (!snapshot) return;
+    this.boardView.clearCanvas();
+    this.board.clear();
+    this.boardView.clearLayer();
+    (snapshot.objects || []).forEach(data => this._restoreFromSerialized(data));
+  }
+
+  /* ---- Tema ---- */
+  toggleDarkMode() {
+    this.board.isDarkMode = !this.board.isDarkMode;
+    this._applyTheme();
+    this._saveState();
+  }
+
+  _applyTheme() {
+    document.body.classList.toggle('dark-mode', this.board.isDarkMode);
+    this.toolbar.applyThemeIcon(this.board.isDarkMode);
+  }
+
+  /* ---- Orientacao ---- */
+  toggleLandscape() {
+    this.board.isLandscape = !this.board.isLandscape;
+    this.boardView.setOrientation(this.board.isLandscape);
+    const page = this.board.currentPage;
+    if (page) page.orientation = this.board.isLandscape ? 'landscape' : 'portrait';
+    this.toolbar.setLandscapeActive(this.board.isLandscape);
+    this._saveState();
+    setTimeout(() => {
+      const rect = this.$.whiteboard.getBoundingClientRect();
+      this.boardView.canvas.width = rect.width;
+      this.boardView.canvas.height = rect.height;
+      const curPage = this.board.currentPage;
+      if (curPage && curPage.drawingData) this.boardView.drawBackground(curPage.drawingData);
+    }, 450);
+  }
+
+  /* ---- Modais de ajuda/export ---- */
+  openHelp() { this.$.helpModal.classList.remove('hidden'); }
+  openExport() { this.$.exportModal.classList.remove('hidden'); }
+  handleEscape() {
+    this.board.deselectObject();
+    document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+  }
+
+  /* ---- Export ---- */
+  _setupExport() {
+    this.$.exportPdfBtn.addEventListener('click', () => this.exportPDF());
+    this.$.exportPngBtn.addEventListener('click', () => this.exportPNG());
+    this.$.exportJsonBtn.addEventListener('click', () => this.exportJSON());
+    this.$.jsonUpload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) this.importJSON(file);
+      e.target.value = '';
+    });
+  }
+
+  exportPDF() {
+    this._saveCurrentPage();
+    this.showToast('Gerando PDF...');
+    window.html2canvas(this.$.whiteboard, { scale: 2, backgroundColor: '#ffffff' }).then((c) => {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({
+        orientation: this.board.isLandscape ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [c.width / 2, c.height / 2]
+      });
+      pdf.addImage(c.toDataURL('image/png'), 'PNG', 0, 0, c.width / 2, c.height / 2);
+      pdf.save('lousa-virtual.pdf');
+      this.showToast('PDF exportado!');
+      this.$.exportModal.classList.add('hidden');
+    });
+  }
+
+  exportPNG() {
+    this._saveCurrentPage();
+    this.showToast('Gerando PNG...');
+    window.html2canvas(this.$.whiteboard, { scale: 2, backgroundColor: '#ffffff' }).then((c) => {
+      const link = document.createElement('a');
+      link.download = 'lousa-virtual.png';
+      link.href = c.toDataURL('image/png');
+      link.click();
+      this.showToast('PNG exportado!');
+      this.$.exportModal.classList.add('hidden');
+    });
+  }
+
+  exportJSON() {
+    this._saveCurrentPage();
+    const data = { version: 1, pages: this.board.pages, library: this.board.library };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.download = 'lousa-virtual.json';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    this.showToast('Projeto salvo!');
+    this.$.exportModal.classList.add('hidden');
+  }
+
+  importJSON(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.pages) {
+          this.board.pages = data.pages;
+          this.board.library = data.library || [];
+          this.board.currentPageIndex = 0;
+          this.renderPagesList();
+          this.renderLibrary();
+          this._switchPage(0);
+          this.showToast('Projeto carregado!');
         }
-    }
+      } catch {
+        this.showToast('Arquivo invalido');
+      }
+    };
+    reader.readAsText(file);
+  }
 
-    _createMathObject(x, y) {
-        this._openModal('Nova Equação LaTeX', 'Expressão LaTeX:', '').then((value) => {
-            if (value !== null && value.trim()) {
-                const obj = new MathObject(null, x, y, value);
-                this.board.addObject(obj);
-                this.mathRenderer.render(obj, this.board.element);
-                obj.updateDimensions();
-                this.board.selectObject(obj);
-            }
-        });
-    }
+  /* ---- Upload de imagem ---- */
+  _setupImageUpload() {
+    this.$.imageUpload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => this.objectController.createImage(ev.target.result, false, 100, 100);
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    });
+  }
 
-    _editMathObject(obj) {
-        this._editingObject = obj;
-        this._openModal('Editar Equação LaTeX', 'Expressão LaTeX:', obj.latex).then((value) => {
-            if (value !== null) {
-                obj.setLatex(value);
-                this.mathRenderer.update(obj);
-                this.board.selectObject(obj);
-            }
-            this._editingObject = null;
-        });
-    }
-
-    _createTextObject(x, y) {
-        const obj = new TextObject(null, x, y, '');
-        this.board.addObject(obj);
-        this.textRenderer.render(obj, this.board.element);
-        obj.updateDimensions();
-        this.board.selectObject(obj);
-
-        setTimeout(() => {
-            this._startInlineEdit(obj);
-        }, 50);
-    }
-
-    _editTextObject(obj) {
-        this._startInlineEdit(obj);
-    }
-
-    _startInlineEdit(textObject) {
-        if (!textObject.element) return;
-        const content = textObject.element.querySelector('.board__text-content');
-        if (!content) return;
-
-        content.contentEditable = 'true';
-        content.focus();
-
-        if (textObject.text === '') {
-            content.textContent = '';
-            content.style.color = '';
-            content.style.fontStyle = '';
+  /* ---- Drag & Drop ---- */
+  _setupDragDrop() {
+    const workspace = this.$.workspace;
+    workspace.addEventListener('dragover', (e) => e.preventDefault());
+    workspace.addEventListener('drop', (e) => {
+      e.preventDefault();
+      for (const file of e.dataTransfer.files) {
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = (ev) => this.objectController.createImage(ev.target.result, false, 100, 100);
+          reader.readAsDataURL(file);
+        } else if (file.name.endsWith('.json')) {
+          this.importJSON(file);
         }
+      }
+    });
+  }
 
-        const finishEdit = () => {
-            content.contentEditable = 'false';
-            textObject.setText(content.textContent);
-            textObject.updateDimensions();
-            content.removeEventListener('blur', finishEdit);
-            content.removeEventListener('keydown', onKey);
-        };
+  /* ---- Persistencia ---- */
+  _loadState() {
+    try {
+      const data = JSON.parse(localStorage.getItem(this.STORAGE_KEY));
+      if (data) {
+        this.board.pages = data.pages || [];
+        this.board.library = data.library || [];
+        this.board.isDarkMode = data.isDarkMode || false;
+        this.board.isLandscape = data.isLandscape || false;
+        this.board.currentPageIndex = data.currentPageIndex || 0;
+      }
+    } catch {}
+  }
 
-        const onKey = (e) => {
-            if (e.key === 'Escape') {
-                finishEdit();
-            }
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                finishEdit();
-            }
-        };
+  _saveState() {
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify({
+        pages: this.board.pages,
+        library: this.board.library,
+        isDarkMode: this.board.isDarkMode,
+        isLandscape: this.board.isLandscape,
+        currentPageIndex: this.board.currentPageIndex
+      }));
+    } catch {}
+  }
 
-        content.addEventListener('blur', finishEdit);
-        content.addEventListener('keydown', onKey);
-    }
+  /* ---- Toast ---- */
+  showToast(msg) {
+    const toast = this.$.toast;
+    toast.textContent = msg;
+    toast.classList.remove('hidden');
+    toast.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => toast.classList.remove('show'), 2000);
+  }
 
-    _promptImageURL(x, y) {
-        this._openModal('Inserir Imagem', 'URL da imagem (SVG ou outra):', '').then((value) => {
-            if (value !== null && value.trim()) {
-                const obj = new ImageObject(null, x, y, value);
-                this.board.addObject(obj);
-                this.svgRenderer.render(obj, this.board.element);
-                this.board.selectObject(obj);
-            }
-        });
-    }
-
-    _createShapeObject(shapeType, x, y) {
-        const shape = this.svgRenderer.renderShape(shapeType, x, y, this.board.element);
-        this.board.addObject(shape);
-        this.board.selectObject(shape);
-    }
-
-    _deleteSelected() {
-        const selected = this.board.selectedObject;
-        if (selected) {
-            this.board.removeObject(selected.id);
-        }
-    }
-
-    _onEscape() {
-        this.board.deselectAll();
-        this.setTool('select');
-    }
-
-    _onContextMenu(data) {
-        const menu = this.contextMenu;
-        menu.style.left = data.clientX + 'px';
-        menu.style.top = data.clientY + 'px';
-        menu.classList.add('context-menu--visible');
-        this._contextTarget = data.object;
-    }
-
-    _hideContextMenu() {
-        this.contextMenu.classList.remove('context-menu--visible');
-    }
-
-    _handleContextAction(action) {
-        const obj = this._contextTarget;
-        if (!obj) return;
-
-        switch (action) {
-            case 'edit':
-                if (obj.type === 'math') this._editMathObject(obj);
-                else if (obj.type === 'text') this._editTextObject(obj);
-                break;
-            case 'duplicate':
-                this._duplicateObject(obj);
-                break;
-            case 'bring-front':
-                this.board.bringToFront(obj);
-                break;
-            case 'send-back':
-                this.board.sendToBack(obj);
-                break;
-            case 'delete':
-                this.board.removeObject(obj.id);
-                break;
-        }
-
-        this._hideContextMenu();
-    }
-
-    _duplicateObject(obj) {
-        const data = obj.toJSON();
-        data.id = null;
-        data.x += 20;
-        data.y += 20;
-
-        let newObj;
-        switch (obj.type) {
-            case 'math':
-                newObj = new MathObject(null, data.x, data.y, data.latex);
-                this.board.addObject(newObj);
-                this.mathRenderer.render(newObj, this.board.element);
-                break;
-            case 'text':
-                newObj = new TextObject(null, data.x, data.y, data.text);
-                this.board.addObject(newObj);
-                this.textRenderer.render(newObj, this.board.element);
-                break;
-            case 'image':
-                newObj = new ImageObject(null, data.x, data.y, data.src, data.width, data.height);
-                this.board.addObject(newObj);
-                this.svgRenderer.render(newObj, this.board.element);
-                break;
-            default:
-                return;
-        }
-
-        requestAnimationFrame(() => {
-            newObj.updateDimensions();
-            this.board.selectObject(newObj);
-        });
-    }
-
-    _openModal(title, label, defaultValue) {
-        return new Promise((resolve) => {
-            this._modalResolve = resolve;
-            this.modalTitle.textContent = title;
-            this.modalLabel.textContent = label;
-            this.modalInput.value = defaultValue || '';
-            this.modalOverlay.classList.add('modal-overlay--visible');
-
-            if (this.modalInput.tagName === 'TEXTAREA') {
-                this.modalInput.focus();
-            }
-
-            this._onInputPreview();
-        });
-    }
-
-    _modalConfirm() {
-        const value = this.modalInput.value;
-        this.modalOverlay.classList.remove('modal-overlay--visible');
-        if (this._modalResolve) {
-            this._modalResolve(value);
-            this._modalResolve = null;
-        }
-    }
-
-    _modalCancel() {
-        this.modalOverlay.classList.remove('modal-overlay--visible');
-        if (this._modalResolve) {
-            this._modalResolve(null);
-            this._modalResolve = null;
-        }
-    }
-
-    _onInputPreview() {
-        const latex = this.modalInput.value;
-        this.modalPreview.innerHTML = '';
-        if (latex.trim()) {
-            try {
-                if (typeof katex !== 'undefined') {
-                    katex.render(latex, this.modalPreview, {
-                        throwOnError: false,
-                        displayMode: true
-                    });
-                } else {
-                    this.modalPreview.textContent = latex;
-                }
-            } catch (e) {
-                this.modalPreview.textContent = latex;
-                this.modalPreview.style.color = '#e94560';
-            }
-        } else {
-            this.modalPreview.textContent = 'Pré-visualização...';
-            this.modalPreview.style.color = '#8899aa';
-        }
-    }
+  /** Acessa paginas/estado para helpers externos. */
+  get debug() {
+    return { board: this.board };
+  }
 }

@@ -1,66 +1,124 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const boardElement = document.getElementById('board');
-    const board = new Board(boardElement);
+/* ============================================
+   LOUSA VIRTUAL - App Entry Point (ES Module)
+   ============================================
+   Instancia o modelo, as views e os controllers
+   seguindo a arquitetura MVC.
+   ============================================ */
 
-    const mouseController = new MouseController(board, boardElement);
-    const keyboardController = new KeyboardController(board);
-    const controller = new BoardController(board, mouseController, keyboardController);
+import { Board } from './models/Board.js';
+import { BoardView } from './views/BoardView.js';
+import { ToolbarView } from './views/ToolbarView.js';
+import { MathEditorView } from './views/MathEditorView.js';
+import { SelectionView } from './views/SelectionView.js';
+import { MathRenderer } from './renderers/MathRenderer.js';
+import { BoardController } from './controllers/BoardController.js';
+import { ToolController } from './controllers/ToolController.js';
+import { ObjectController } from './controllers/ObjectController.js';
+import { MouseController } from './controllers/MouseController.js';
 
-    controller.init();
+(function () {
+  'use strict';
 
-    document.getElementById('btn-save').addEventListener('click', () => {
-        const data = board.toJSON();
-        const json = JSON.stringify(data, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'lousa-' + new Date().toISOString().slice(0, 10) + '.json';
-        a.click();
-        URL.revokeObjectURL(url);
-    });
+  /* ---- Referencias DOM centralizadas ---- */
+  const byId = (id) => document.getElementById(id);
 
-    document.getElementById('btn-load').addEventListener('click', () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
-        input.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    const data = JSON.parse(ev.target.result);
-                    board.clear();
-                    const objects = board.fromJSON(data);
-                    objects.forEach(obj => {
-                        switch (obj.type) {
-                            case 'math':
-                                controller.mathRenderer.render(obj, boardElement);
-                                break;
-                            case 'text':
-                                controller.textRenderer.render(obj, boardElement);
-                                break;
-                            case 'image':
-                                controller.svgRenderer.render(obj, boardElement);
-                                break;
-                        }
-                    });
-                } catch (err) {
-                    console.error('Erro ao carregar arquivo:', err);
-                    alert('Arquivo inválido.');
-                }
-            };
-            reader.readAsText(file);
-        });
-        input.click();
-    });
+  // Chaves usadas pelas views/controllers (nomes coerentes).
+  const ui = {
+    /* BoardView (elements) */
+    whiteboard: byId('whiteboard'),
+    canvas: byId('drawing-canvas'),
+    elementsLayer: byId('elements-layer'),
+    zoomLevel: byId('zoom-level'),
 
-    document.getElementById('btn-clear').addEventListener('click', () => {
-        if (confirm('Tem certeza que deseja limpar toda a lousa?')) {
-            board.clear();
-        }
-    });
+    /* Toolbar / controls */
+    penColor: byId('pen-color'),
+    penSize: byId('pen-size'),
+    undoBtn: byId('undo-btn'),
+    redoBtn: byId('redo-btn'),
+    clearPageBtn: byId('clear-page-btn'),
+    addPageBtn: byId('add-page-btn'),
+    libraryBtn: byId('library-btn'),
+    closeLibraryBtn: byId('close-library-btn'),
+    darkModeBtn: byId('dark-mode-btn'),
+    landscapeBtn: byId('landscape-btn'),
+    helpBtn: byId('help-btn'),
+    exportBtn: byId('export-btn'),
+    zoomInBtn: byId('zoom-in-btn'),
+    zoomOutBtn: byId('zoom-out-btn'),
 
-    window.lousa = { board, controller };
-});
+    /* Modais */
+    equationModal: byId('equation-modal'),
+    latexInput: byId('latex-input'),
+    equationPreview: byId('equation-preview'),
+    insertEquationBtn: byId('insert-equation-btn'),
+
+    graphModal: byId('graph-modal'),
+    graphFunction: byId('graph-function'),
+    graphXmin: byId('graph-xmin'),
+    graphXmax: byId('graph-xmax'),
+    graphYmin: byId('graph-ymin'),
+    graphYmax: byId('graph-ymax'),
+    graphColor: byId('graph-color'),
+    graphWidth: byId('graph-width'),
+    graphPreview: byId('graph-preview'),
+    insertGraphBtn: byId('insert-graph-btn'),
+
+    helpModal: byId('help-modal'),
+    exportModal: byId('export-modal'),
+    exportPdfBtn: byId('export-pdf-btn'),
+    exportPngBtn: byId('export-png-btn'),
+    exportJsonBtn: byId('export-json-btn'),
+
+    /* Sidebars / listas */
+    pagesSidebar: byId('pages-sidebar'),
+    pagesList: byId('pages-list'),
+    librarySidebar: byId('library-sidebar'),
+    librarySearchInput: byId('library-search-input'),
+    libraryList: byId('library-list'),
+    saveToLibraryBtn: byId('save-to-library-btn'),
+
+    /* Diversos */
+    toast: byId('toast'),
+    workspace: byId('workspace'),
+    imageUpload: byId('image-upload'),
+    jsonUpload: byId('json-upload')
+  };
+
+  /* ---- Instancia o modelo ---- */
+  const board = new Board();
+
+  /* ---- Renderers ---- */
+  const mathRenderer = new MathRenderer();
+
+  /* ---- Views ---- */
+  const boardView = new BoardView(board, ui);
+  boardView.mathRenderer = mathRenderer;
+
+  const toolbar = new ToolbarView(board, ui);
+  const mathEditor = new MathEditorView(ui);
+  const selectionView = new SelectionView(board, boardView);
+  boardView.selectionView = selectionView;
+  selectionView.getCurrentTool = () => toolbar.currentTool;
+
+  /* ---- Controllers ---- */
+  const objectController = new ObjectController(board, boardView, mathEditor, {
+    $: ui,
+    graphModal: ui.graphModal
+  });
+
+  const mouseController = new MouseController(board, boardView, toolbar, objectController);
+  const toolController = new ToolController(board, boardView, toolbar);
+  const boardController = new BoardController(
+    board, boardView, toolbar, mathEditor,
+    toolController, mouseController, objectController, selectionView, ui
+  );
+
+  /* ---- Inicializacao ---- */
+  mathEditor.init();
+  toolbar.init();
+  toolController.init();
+  boardController.init();
+
+  // Disponibiliza o controller no escopo global para debug.
+  window.__lousa = { board, boardController };
+})();

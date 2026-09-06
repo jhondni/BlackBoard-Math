@@ -1,123 +1,390 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lousa Online - Matemática</title>
-
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/toolbar.css">
-    <link rel="stylesheet" href="css/board.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lousa Virtual - Matematica com LaTeX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <header class="header">
-        <h1 class="header__title">Lousa Online</h1>
-        <div class="header__actions">
-            <button id="btn-save" class="header__btn" title="Salvar">Salvar</button>
-            <button id="btn-load" class="header__btn" title="Carregar">Carregar</button>
-            <button id="btn-clear" class="header__btn header__btn--danger" title="Limpar Lousa">Limpar</button>
+  <!-- SIDEBAR DE PAGINAS -->
+  <aside id="pages-sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 2h9l5 5v13c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm8 1v6h6M8 14h8M8 18h5"/></svg>
+        <span>Paginas</span>
+      </div>
+      <button id="add-page-btn" title="Nova Pagina">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <div id="pages-list"></div>
+  </aside>
+
+  <!-- BARRA LATERAL DE BIBLIOTECA -->
+  <aside id="library-sidebar" class="hidden">
+    <div class="sidebar-header">
+      <div class="sidebar-title">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+        <span>Biblioteca</span>
+      </div>
+      <button id="close-library-btn" title="Fechar">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="library-search">
+      <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input type="text" id="library-search-input" placeholder="Buscar equacao...">
+    </div>
+    <div id="library-list"></div>
+    <div class="library-footer">
+      <button id="save-to-library-btn">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+        Salvar equacao
+      </button>
+    </div>
+  </aside>
+
+  <!-- BARRA DE FERRAMENTAS - FLOATING PILL -->
+  <nav id="toolbar">
+    <div class="toolbar-section">
+      <button id="tool-select" class="tool-btn active" data-tooltip="Selecionar (V)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2l10 10-4.5 1 2.8 6.5-2.5 1.1-2.8-6.5L7 17V2z"/></svg>
+      </button>
+      <button id="tool-draw" class="tool-btn" data-tooltip="Desenhar (D)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+      </button>
+      <button id="tool-text" class="tool-btn" data-tooltip="Texto (T)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M5 4v3h5.5v12h3V7H19V4H5z"/></svg>
+      </button>
+      <button id="tool-eraser" class="tool-btn" data-tooltip="Borracha (X)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12.29 20.2a2.01 2.01 0 01-2.83 0L3.59 14.33a2 2 0 010-2.83l8.59-8.59a2 2 0 012.83-.35zM4.41 12.9l6.59 6.59 3.54-3.54-6.59-6.59L4.41 12.9z"/></svg>
+      </button>
+      <button id="tool-blur" class="tool-btn" data-tooltip="Borrar (B)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5"/><circle cx="12" cy="12" r="4" fill="currentColor" opacity="0.3"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-section">
+      <div class="pen-config">
+        <input type="color" id="pen-color" value="#000000" title="Cor">
+        <input type="range" id="pen-size" min="1" max="20" value="3" title="Espessura">
+      </div>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-section">
+      <button id="tool-equation" class="tool-btn accent-btn" data-tooltip="Equacao LaTeX (E)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><text x="3" y="18" font-size="16" font-weight="bold" fill="currentColor">f</text></svg>
+      </button>
+      <button id="tool-graph" class="tool-btn accent-btn" data-tooltip="Grafico (G)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3v18h18V3H3zm4 14H5v-2h2v2zm0-4H5v-2h2v2zm0-4H5V7h2v2zm4 8H9v-2h2v2zm0-4H9v-2h2v2zm0-4H9V7h2v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
+      </button>
+      <button id="tool-image" class="tool-btn accent-btn" data-tooltip="Imagem (I)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-section">
+      <button id="undo-btn" class="tool-btn" data-tooltip="Desfazer (Ctrl+Z)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12.5 8c-2.65 0-5.05 1.04-6.83 2.73L2 7.08V16h8.92l-3.69-3.69A7.96 7.96 0 0112.5 10c3.53 0 6.43 2.61 6.92 6h2.02c-.5-4.57-4.31-8-8.94-8z"/></svg>
+      </button>
+      <button id="redo-btn" class="tool-btn" data-tooltip="Refazer (Ctrl+Y)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.63 0-8.44 3.43-8.94 8h2.02c.49-3.39 3.39-6 6.92-6 2.47 0 4.67 1.31 5.88 3.28L13 16h9V7l-3.6 3.6z"/></svg>
+      </button>
+      <button id="clear-page-btn" class="tool-btn" data-tooltip="Limpar Pagina">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- TOOLBAR DIREITO - CONTROLES -->
+  <div id="controls-bar">
+    <button id="library-btn" class="ctrl-btn" data-tooltip="Biblioteca">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
+    </button>
+    <div class="ctrl-divider"></div>
+    <div class="zoom-pill">
+      <button id="zoom-out-btn" class="ctrl-btn" data-tooltip="Zoom Out">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M5 12h14"/></svg>
+      </button>
+      <span id="zoom-level">100%</span>
+      <button id="zoom-in-btn" class="ctrl-btn" data-tooltip="Zoom In">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <div class="ctrl-divider"></div>
+    <button id="dark-mode-btn" class="ctrl-btn" data-tooltip="Modo Escuro">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 01-4.4 2.26 5.4 5.4 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
+    </button>
+    <button id="landscape-btn" class="ctrl-btn" data-tooltip="Orientacao">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+    </button>
+    <button id="help-btn" class="ctrl-btn" data-tooltip="Ajuda">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+    </button>
+    <button id="export-btn" class="ctrl-btn export-action" data-tooltip="Exportar">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
+    </button>
+  </div>
+
+  <!-- AREA PRINCIPAL - LOUSA -->
+  <main id="workspace">
+    <div id="canvas-container">
+      <div id="whiteboard" class="portrait">
+        <canvas id="drawing-canvas"></canvas>
+        <div id="elements-layer"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL DE EQUACAO -->
+  <div id="equation-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content glass-panel">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon eq-icon">f(x)</div>
+          <h3>Inserir Equacao LaTeX</h3>
         </div>
-    </header>
-
-    <div class="app">
-        <aside class="toolbar" id="toolbar">
-            <button class="toolbar__btn toolbar__btn--active" data-tool="select" title="Selecionar (V)">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
-                    <path d="M13 13l6 6"/>
-                </svg>
-            </button>
-            <button class="toolbar__btn" data-tool="math" title="Equação LaTeX (E)">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <text x="3" y="18" font-size="16" font-family="serif" fill="currentColor" stroke="none">fx</text>
-                </svg>
-            </button>
-            <button class="toolbar__btn" data-tool="text" title="Texto (T)">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="4 7 4 4 20 4 20 7"/>
-                    <line x1="12" y1="4" x2="12" y2="20"/>
-                    <line x1="8" y1="20" x2="16" y2="20"/>
-                </svg>
-            </button>
-            <button class="toolbar__btn" data-tool="image" title="Imagem SVG (I)">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21 15 16 10 5 21"/>
-                </svg>
-            </button>
-            <div class="toolbar__separator"></div>
-            <button class="toolbar__btn" data-tool="triangle" title="Triângulo">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="12,3 22,21 2,21"/>
-                </svg>
-            </button>
-            <button class="toolbar__btn" data-tool="circle" title="Círculo">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="9"/>
-                </svg>
-            </button>
-            <button class="toolbar__btn" data-tool="rectangle" title="Retângulo">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="4" y="4" width="16" height="16" rx="1"/>
-                </svg>
-            </button>
-        </aside>
-
-        <main class="board-container">
-            <div class="board" id="board">
-            </div>
-        </main>
-    </div>
-
-    <div class="modal-overlay" id="modal-overlay">
-        <div class="modal" id="modal">
-            <div class="modal__header">
-                <h2 class="modal__title" id="modal-title">Editor</h2>
-                <button class="modal__close" id="modal-close">&times;</button>
-            </div>
-            <div class="modal__body">
-                <label class="modal__label" id="modal-label" for="modal-input">Expressão LaTeX:</label>
-                <textarea class="modal__input" id="modal-input" rows="3" placeholder="Ex: \frac{-b \pm \sqrt{b^2-4ac}}{2a}"></textarea>
-                <div class="modal__preview" id="modal-preview"></div>
-            </div>
-            <div class="modal__footer">
-                <button class="modal__btn modal__btn--cancel" id="modal-cancel">Cancelar</button>
-                <button class="modal__btn modal__btn--confirm" id="modal-confirm">Confirmar</button>
-            </div>
+        <button class="close-modal-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="equation-input-area">
+          <textarea id="latex-input" placeholder="\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}" rows="3"></textarea>
         </div>
+        <div class="equation-preview" id="equation-preview">
+          <span class="placeholder-text">Preview da equacao</span>
+        </div>
+        <div class="equation-templates">
+          <span class="section-label">Templates</span>
+          <div class="template-grid">
+            <button class="template-btn" data-latex="\\frac{a}{b}"><span class="tpl-mono">a/b</span></button>
+            <button class="template-btn" data-latex="\\sqrt{x}"><span class="tpl-mono">&radic;x</span></button>
+            <button class="template-btn" data-latex="x^{n}"><span class="tpl-mono">x^n</span></button>
+            <button class="template-btn" data-latex="x_{n}"><span class="tpl-mono">x_n</span></button>
+            <button class="template-btn" data-latex="\\int_{a}^{b} f(x)dx"><span class="tpl-mono">Integral</span></button>
+            <button class="template-btn" data-latex="\\sum_{i=1}^{n} x_i"><span class="tpl-mono">Soma</span></button>
+            <button class="template-btn" data-latex="\\lim_{x \\to \\infty} f(x)"><span class="tpl-mono">Limite</span></button>
+            <button class="template-btn" data-latex="\\frac{dy}{dx}"><span class="tpl-mono">Derivada</span></button>
+            <button class="template-btn" data-latex="\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}"><span class="tpl-mono">Matriz</span></button>
+            <button class="template-btn" data-latex="\\alpha \\beta \\gamma \\pi \\theta"><span class="tpl-mono">Gregas</span></button>
+            <button class="template-btn" data-latex="\\forall \\exists \\in \\subset \\cup \\cap"><span class="tpl-mono">Logica</span></button>
+            <button class="template-btn" data-latex="\\vec{v} \\cdot \\vec{w} = |v||w|\\cos\\theta"><span class="tpl-mono">Vetores</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="close-modal-btn btn-ghost">Cancelar</button>
+        <button id="insert-equation-btn" class="btn-glow">Inserir</button>
+      </div>
     </div>
+  </div>
 
-    <div class="context-menu" id="context-menu">
-        <button class="context-menu__item" data-action="edit">Editar</button>
-        <button class="context-menu__item" data-action="duplicate">Duplicar</button>
-        <button class="context-menu__item" data-action="bring-front">Trazer para frente</button>
-        <button class="context-menu__item" data-action="send-back">Enviar para trás</button>
-        <hr class="context-menu__separator">
-        <button class="context-menu__item context-menu__item--danger" data-action="delete">Excluir</button>
+  <!-- MODAL DE GRAFICO -->
+  <div id="graph-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content glass-panel">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon graph-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3v18h18V3H3zm4 14H5v-2h2v2zm0-4H5v-2h2v2zm0-4H5V7h2v2zm4 8H9v-2h2v2zm0-4H9v-2h2v2zm0-4H9V7h2v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V7h2v2z"/></svg>
+          </div>
+          <h3>Criar Grafico</h3>
+        </div>
+        <button class="close-modal-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="graph-input-area">
+          <label>Funcao f(x)</label>
+          <input type="text" id="graph-function" placeholder="Math.sin(x)">
+        </div>
+        <div class="graph-settings">
+          <div class="setting-row">
+            <div class="setting-group">
+              <label>X min</label>
+              <input type="number" id="graph-xmin" value="-10">
+            </div>
+            <div class="setting-group">
+              <label>X max</label>
+              <input type="number" id="graph-xmax" value="10">
+            </div>
+            <div class="setting-group">
+              <label>Y min</label>
+              <input type="number" id="graph-ymin" value="-10">
+            </div>
+            <div class="setting-group">
+              <label>Y max</label>
+              <input type="number" id="graph-ymax" value="10">
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-group">
+              <label>Cor</label>
+              <input type="color" id="graph-color" value="#6C5CE7">
+            </div>
+            <div class="setting-group">
+              <label>Largura</label>
+              <input type="number" id="graph-width" value="2" min="1" max="10">
+            </div>
+          </div>
+        </div>
+        <div class="graph-preview-wrap">
+          <canvas id="graph-preview" width="500" height="350"></canvas>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="close-modal-btn btn-ghost">Cancelar</button>
+        <button id="insert-graph-btn" class="btn-glow">Inserir Grafico</button>
+      </div>
     </div>
+  </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <!-- MODAL DE AJUDA -->
+  <div id="help-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content glass-panel modal-help">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon help-icon">?</div>
+          <h3>Como Usar</h3>
+        </div>
+        <button class="close-modal-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="help-grid">
+          <div class="help-card">
+            <div class="help-key">V</div>
+            <h4>Selecionar</h4>
+            <p>Arraste e mova elementos pela lousa</p>
+          </div>
+          <div class="help-card">
+            <div class="help-key">D</div>
+            <h4>Desenhar</h4>
+            <p>Desenhe livremente na lousa</p>
+          </div>
+          <div class="help-card">
+            <div class="help-key">T</div>
+            <h4>Texto</h4>
+            <p>Insira textos clicando na lousa</p>
+          </div>
+          <div class="help-card">
+            <div class="help-key">E</div>
+            <h4>Equacao</h4>
+            <p>Escreva equacoes em LaTeX</p>
+          </div>
+          <div class="help-card">
+            <div class="help-key">G</div>
+            <h4>Grafico</h4>
+            <p>Crie graficos de funcoes</p>
+          </div>
+          <div class="help-card">
+            <div class="help-key">I</div>
+            <h4>Imagem</h4>
+            <p>Insira imagens na lousa</p>
+          </div>
+          <div class="help-card">
+            <div class="help-key">X</div>
+            <h4>Borracha</h4>
+            <p>Apague partes do desenho</p>
+          </div>
+          <div class="help-card">
+            <div class="help-key">B</div>
+            <h4>Borrar</h4>
+            <p>Aplique efeito blur nos elementos</p>
+          </div>
+        </div>
+        <div class="shortcuts-section">
+          <span class="section-label">Atalhos</span>
+          <div class="shortcuts-grid">
+            <div class="shortcut"><kbd>Ctrl+Z</kbd><span>Desfazer</span></div>
+            <div class="shortcut"><kbd>Ctrl+Y</kbd><span>Refazer</span></div>
+            <div class="shortcut"><kbd>Ctrl+Scroll</kbd><span>Zoom</span></div>
+            <div class="shortcut"><kbd>Del</kbd><span>Remover item</span></div>
+            <div class="shortcut"><kbd>Esc</kbd><span>Fechar / Deselecionar</span></div>
+            <div class="shortcut"><kbd>+/-</kbd><span>Zoom</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="close-modal-btn btn-glow">Entendido!</button>
+      </div>
+    </div>
+  </div>
 
-    <script src="js/models/BoardObject.js"></script>
-    <script src="js/models/MathObject.js"></script>
-    <script src="js/models/TextObject.js"></script>
-    <script src="js/models/ImageObject.js"></script>
+  <!-- MODAL DE EXPORTAR -->
+  <div id="export-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content glass-panel modal-export">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon export-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
+          </div>
+          <h3>Exportar</h3>
+        </div>
+        <button class="close-modal-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <button id="export-pdf-btn" class="export-card">
+          <div class="export-card-icon pdf">
+            <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm10 5.5h1v-3h-1v3z"/></svg>
+          </div>
+          <div class="export-card-text">
+            <span class="export-card-title">PDF</span>
+            <span class="export-card-desc">Documento formatado</span>
+          </div>
+        </button>
+        <button id="export-png-btn" class="export-card">
+          <div class="export-card-icon png">
+            <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+          </div>
+          <div class="export-card-text">
+            <span class="export-card-title">PNG</span>
+            <span class="export-card-desc">Imagem em alta resolucao</span>
+          </div>
+        </button>
+        <button id="export-json-btn" class="export-card">
+          <div class="export-card-icon json">
+            <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          </div>
+          <div class="export-card-text">
+            <span class="export-card-title">Projeto</span>
+            <span class="export-card-desc">Salvar como .json</span>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
 
-    <script src="js/board/Board.js"></script>
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
 
-    <script src="js/renderers/Renderer.js"></script>
-    <script src="js/renderers/MathRenderer.js"></script>
-    <script src="js/renderers/TextRenderer.js"></script>
-    <script src="js/renderers/SVGRenderer.js"></script>
+  <input type="file" id="image-upload" accept="image/*" style="display:none">
+  <input type="file" id="json-upload" accept=".json" style="display:none">
 
-    <script src="js/controllers/MouseController.js"></script>
-    <script src="js/controllers/KeyboardController.js"></script>
-    <script src="js/controllers/BoardController.js"></script>
-
-    <script src="js/app.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -1,141 +1,107 @@
-class SVGRenderer extends Renderer {
-    constructor() {
-        super();
-    }
+/* ============================================
+   LOUSA VIRTUAL - SVGRenderer
+   ============================================
+   Representacao de formas e elementos vetoriais
+   em SVG (utilizado por ShapeObject, exportacao e
+   para suporte a graficos/vetores na lousa).
+   ============================================ */
 
-    render(imageObject, boardElement) {
-        const el = this.createElement('div', 'board__object board__object--image');
-        imageObject.setElement(el);
-        el.style.width = imageObject.width + 'px';
-        el.style.height = imageObject.height + 'px';
+export class SVGRenderer {
+  /**
+   * Cria um elemento <svg> vazio com namespace correto.
+   * @param {number} [width]
+   * @param {number} [height]
+   * @returns {SVGElement}
+   */
+  static svgContainer(width = 0, height = 0) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', width);
+    svg.setAttribute('height', height);
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    return svg;
+  }
 
-        if (imageObject.src) {
-            if (imageObject.src.trim().startsWith('<svg')) {
-                el.innerHTML = imageObject.src;
-                const svg = el.querySelector('svg');
-                if (svg) {
-                    svg.setAttribute('width', '100%');
-                    svg.setAttribute('height', '100%');
-                }
-            } else {
-                const img = document.createElement('img');
-                img.src = imageObject.src;
-                img.alt = 'Imagem';
-                img.draggable = false;
-                el.appendChild(img);
-            }
-        }
+  /**
+   * Cria uma primitiva SVG (circle, rect, line, path...).
+   * @param {string} tag - Nome do elemento (ex: 'circle')
+   * @param {object} [attrs] - Atributos (ex: { cx: 50, cy: 50, r: 10 })
+   * @returns {SVGElement}
+   */
+  static createShape(tag, attrs = {}) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const el = document.createElementNS(ns, tag);
+    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+    return el;
+  }
 
-        this.appendToBoard(el, boardElement);
-        requestAnimationFrame(() => {
-            imageObject.updateDimensions();
+  /**
+   * Desenha uma forma geometrica dentro de um container SVG.
+   * @param {object} shape - { shapeType, x, y, width, height, fill, stroke }
+   * @param {number} [containerWidth]
+   * @param {number} [containerHeight]
+   * @returns {SVGElement}
+   */
+  renderShape(shape, containerWidth = 200, containerHeight = 150) {
+    const { shapeType = 'rect', width = containerWidth, height = containerHeight } = shape;
+    const svg = SVGRenderer.svgContainer(containerWidth, containerHeight);
+    const fill = shape.fill || 'transparent';
+    const stroke = shape.stroke || '#1a1a1a';
+
+    let node;
+    switch (shapeType) {
+      case 'circle':
+        node = SVGRenderer.createShape('ellipse', {
+          cx: containerWidth / 2,
+          cy: containerHeight / 2,
+          rx: width / 2,
+          ry: height / 2,
+          fill,
+          stroke
         });
-
-        return el;
+        break;
+      case 'triangle':
+        node = SVGRenderer.createShape('polygon', {
+          points: `${containerWidth / 2},${0} ${0},${containerHeight} ${containerWidth},${containerHeight}`,
+          fill,
+          stroke
+        });
+        break;
+      case 'line':
+        node = SVGRenderer.createShape('line', {
+          x1: 0, y1: containerHeight / 2,
+          x2: containerWidth, y2: containerHeight / 2,
+          stroke,
+          'stroke-width': 2
+        });
+        break;
+      case 'ellipse':
+      case 'rect':
+      default:
+        node = SVGRenderer.createShape(shapeType === 'ellipse' ? 'ellipse' : 'rect', {
+          x: shapeType === 'rect' ? 1 : 0,
+          y: shapeType === 'rect' ? 1 : 0,
+          width: shapeType === 'rect' ? width - 2 : width,
+          height: shapeType === 'rect' ? height - 2 : height,
+          rx: shapeType === 'rect' ? 6 : undefined,
+          fill,
+          stroke,
+          'stroke-width': 2
+        });
     }
+    svg.appendChild(node);
+    return svg;
+  }
 
-    renderShape(shapeType, x, y, boardElement) {
-        const id = `shape-${Date.now()}`;
-        const shapeObj = {
-            id: id,
-            type: 'shape',
-            shape: shapeType,
-            x: x,
-            y: y,
-            width: 0,
-            height: 0,
-            element: null,
-            containsPoint: function(px, py) {
-                return px >= this.x && px <= this.x + this.width &&
-                       py >= this.y && py <= this.y + this.height;
-            },
-            select: function() {
-                this.selected = true;
-                if (this.element) this.element.classList.add('board__object--selected');
-            },
-            deselect: function() {
-                this.selected = false;
-                if (this.element) this.element.classList.remove('board__object--selected');
-            },
-            destroy: function() {
-                if (this.element && this.element.parentNode) {
-                    this.element.parentNode.removeChild(this.element);
-                }
-            },
-            toJSON: function() {
-                return {
-                    id: this.id,
-                    type: this.type,
-                    shape: this.shape,
-                    x: this.x,
-                    y: this.y,
-                    width: this.width,
-                    height: this.height
-                };
-            },
-            selected: false
-        };
-
-        const size = 120;
-        shapeObj.width = size;
-        shapeObj.height = size;
-
-        const el = this.createElement('div', 'board__object board__object--shape');
-        el.dataset.objectId = id;
-        el.style.left = x + 'px';
-        el.style.top = y + 'px';
-        el.style.width = size + 'px';
-        el.style.height = size + 'px';
-        shapeObj.element = el;
-
-        const svgNS = 'http://www.w3.org/2000/svg';
-        const svg = document.createElementNS(svgNS, 'svg');
-        svg.setAttribute('width', size);
-        svg.setAttribute('height', size);
-        svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
-
-        let shapeEl;
-        const strokeColor = '#4a9eff';
-        const fillColor = 'rgba(74, 158, 255, 0.08)';
-
-        switch (shapeType) {
-            case 'triangle':
-                shapeEl = document.createElementNS(svgNS, 'polygon');
-                shapeEl.setAttribute('points', `${size/2},8 ${size-8},${size-8} 8,${size-8}`);
-                break;
-            case 'circle':
-                shapeEl = document.createElementNS(svgNS, 'circle');
-                shapeEl.setAttribute('cx', size/2);
-                shapeEl.setAttribute('cy', size/2);
-                shapeEl.setAttribute('r', size/2 - 8);
-                break;
-            case 'rectangle':
-                shapeEl = document.createElementNS(svgNS, 'rect');
-                shapeEl.setAttribute('x', 8);
-                shapeEl.setAttribute('y', 8);
-                shapeEl.setAttribute('width', size - 16);
-                shapeEl.setAttribute('height', size - 16);
-                shapeEl.setAttribute('rx', 4);
-                break;
-        }
-
-        if (shapeEl) {
-            shapeEl.setAttribute('stroke', strokeColor);
-            shapeEl.setAttribute('stroke-width', '2');
-            shapeEl.setAttribute('fill', fillColor);
-            svg.appendChild(shapeEl);
-        }
-
-        el.appendChild(svg);
-        this.appendToBoard(el, boardElement);
-
-        return shapeObj;
-    }
-
-    update(imageObject) {
-        if (imageObject.element) {
-            imageObject.element.style.width = imageObject.width + 'px';
-            imageObject.element.style.height = imageObject.height + 'px';
-        }
-    }
+  /**
+   * Serializa um elemento SVG para string (util para exportacao).
+   * @param {SVGElement} svg
+   * @returns {string}
+   */
+  static serialize(svg) {
+    if (!svg) return '';
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    return new XMLSerializer().serializeToString(clone);
+  }
 }
