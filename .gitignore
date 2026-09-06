@@ -1,0 +1,16 @@
+# Dependências locais
+node_modules/
+
+# Memoria de contexto do projeto (nao versionar)
+.memory/
+
+# Arquivos de saida / export
+*.pdf
+*.png
+!exported/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
