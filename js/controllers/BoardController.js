@@ -72,6 +72,7 @@ export class BoardController {
     // Object controller
     this.objectController.onCommit = () => this.commitHistory();
     this.objectController.onPersist = () => this._saveState();
+    this.objectController.onLibraryChange = () => this.renderLibrary();
 
     // Mouse
     this.mouseController.onStrokeEnd = () => this.commitHistory();
@@ -256,6 +257,11 @@ export class BoardController {
   }
 
   /* ---- Biblioteca ---- */
+  toggleLibrary(open) {
+    this.$.librarySidebar.classList.toggle('hidden', !open);
+    if (open) this.renderLibrary();
+  }
+
   renderLibrary() {
     const list = this.$.libraryList;
     const query = this.$.librarySearchInput.value || '';
@@ -270,16 +276,26 @@ export class BoardController {
     filtered.forEach(item => {
       const div = document.createElement('div');
       div.className = 'library-item';
-      div.innerHTML = `<button class="lib-delete" data-id="${item.id}">&times;</button><div class="lib-label">${item.label}</div>`;
-      try { window.katex.render(item.latex, div, { displayMode: true, throwOnError: false }); } catch {}
-      div.addEventListener('click', (e) => {
-        if (!e.target.closest('.lib-delete')) this.objectController.createEquation(item.latex);
-      });
-      div.querySelector('.lib-delete').addEventListener('click', (e) => {
+
+      const label = document.createElement('div');
+      label.className = 'lib-label';
+      try { window.katex.render(item.latex, label, { displayMode: true, throwOnError: false }); } catch {}
+
+      const del = document.createElement('button');
+      del.className = 'lib-delete';
+      del.dataset.id = item.id;
+      del.textContent = '×';
+      del.addEventListener('click', (e) => {
         e.stopPropagation();
         this.objectController.removeFromLibrary(item.id);
         this.renderLibrary();
         this.showToast('Equacao removida');
+      });
+
+      div.appendChild(del);
+      div.appendChild(label);
+      div.addEventListener('click', (e) => {
+        if (!e.target.closest('.lib-delete')) this.objectController.createEquation(item.latex);
       });
       list.appendChild(div);
     });

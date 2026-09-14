@@ -557,6 +557,8 @@ body {
 }
 
 .library-item {
+  display: flex;
+  align-items: center;
   padding: 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -573,14 +575,14 @@ body {
 .library-item .katex-display { margin: 0; }
 
 .library-item .lib-label {
+  flex: 1;
   font-size: 10px;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 0;
   font-family: var(--font-mono);
 }
 
 .library-item .lib-delete {
-  float: right;
   border: none;
   background: none;
   color: var(--text-muted);
@@ -588,6 +590,8 @@ body {
   font-size: 14px;
   opacity: 0;
   transition: opacity var(--transition);
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .library-item:hover .lib-delete { opacity: 1; }

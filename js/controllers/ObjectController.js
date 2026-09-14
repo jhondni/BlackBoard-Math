@@ -19,6 +19,7 @@ export class ObjectController {
     // Callbacks injetados pelo BoardController
     this.onCommit = null; // () => void -> salvar historico
     this.onPersist = null; // () => void -> salvar estado
+    this.onLibraryChange = null; // () => void -> re-renderizar biblioteca
 
     this.graphCtx = null;
     this.initGraph();
@@ -79,7 +80,10 @@ export class ObjectController {
       });
     } else {
       // Nova equacao
-      this.mathEditor.open('', (latex) => this.createEquation(latex));
+      this.mathEditor.open('', (latex) => {
+        this.createEquation(latex);
+        this.saveToLibrary(latex);
+      });
     }
   }
 
@@ -204,6 +208,7 @@ export class ObjectController {
     if (!latex) return;
     this.board.library.push({ id: Date.now(), latex, label: latex.substring(0, 40) });
     if (this.onPersist) this.onPersist();
+    if (this.onLibraryChange) this.onLibraryChange();
   }
 
   removeFromLibrary(id) {
