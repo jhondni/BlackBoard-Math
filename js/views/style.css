@@ -928,6 +928,10 @@ body.dark-mode #whiteboard::before {
   color: var(--text-primary);
 }
 
+.close-modal-btn.btn-ghost {
+  width: auto;
+}
+
 .modal-body {
   padding: 24px;
   overflow-y: auto;

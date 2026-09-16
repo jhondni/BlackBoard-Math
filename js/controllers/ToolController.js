@@ -76,9 +76,9 @@ export class ToolController {
         this.toolbar.setTool(keyMap[key]);
         return;
       }
-      if (key === 'e') { this.onRequestEquation && this.onRequestEquation(); return; }
-      if (key === 'g') { this.onRequestGraph && this.onRequestGraph(); return; }
-      if (key === 'i') { this.onRequestImage && this.onRequestImage(); return; }
+      if (key === 'e') { e.preventDefault(); this.onRequestEquation && this.onRequestEquation(); return; }
+      if (key === 'g') { e.preventDefault(); this.onRequestGraph && this.onRequestGraph(); return; }
+      if (key === 'i') { e.preventDefault(); this.onRequestImage && this.onRequestImage(); return; }
       if (key === '=' || key === '+') { this.changeZoom(0.1); return; }
       if (key === '-') { this.changeZoom(-0.1); return; }
       if ((key === 'delete' || key === 'backspace')) { this.onDeleteSelected && this.onDeleteSelected(); return; }
