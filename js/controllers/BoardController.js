@@ -55,7 +55,7 @@ export class BoardController {
     this.toolbar.onToggleLandscape = () => this.toggleLandscape();
     this.toolbar.onAddPage = () => this.addPage();
     this.toolbar.onClearPage = () => this.clearPage();
-    this.toolbar.onToggleLibrary = () => this.toggleLibrary(true);
+    this.toolbar.onToggleLibrary = () => this.toggleLibrary(this.$.librarySidebar.classList.contains('hidden'));
     this.toolbar.onCloseLibrary = () => this.toggleLibrary(false);
     this.toolbar.onHelp = () => this.openHelp();
     this.toolbar.onExport = () => this.openExport();
