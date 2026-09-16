@@ -20,6 +20,7 @@ export class SelectionView {
 
     this.onEditEquation = null; // callback (obj) => void
     this.onDeleteObject = null; // callback (obj) => void
+    this.onBlurObject = null; // callback (obj) => void
     this.onCommitChange = null; // callback () => void (salvar historico)
 
     // Getter da ferramenta ativa (injetado pelo app.js).
@@ -54,7 +55,8 @@ export class SelectionView {
     if (blurBtn) {
       blurBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        obj.applyBlur(!obj.blurred);
+        if (this.onBlurObject) this.onBlurObject(obj);
+        else obj.applyBlur(!obj.blurred);
       });
     }
 
@@ -83,6 +85,12 @@ export class SelectionView {
   /* ---- Drag ---- */
   _onDragStart(e, el, obj) {
     const tool = this.getCurrentTool();
+    if (tool === 'blur') {
+      if (e.target.closest('.element-actions') || e.target.classList.contains('resize-handle')) return;
+      e.stopPropagation();
+      if (this.onBlurObject) this.onBlurObject(obj);
+      return;
+    }
     if (tool !== 'select') return;
     if (e.target.closest('.element-actions') || e.target.classList.contains('resize-handle')) return;
 

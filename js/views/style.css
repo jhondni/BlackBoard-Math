@@ -821,7 +821,6 @@ body.dark-mode #whiteboard::before {
 
 .board-element.blurred { filter: blur(8px); }
 .board-element.blurred:hover { filter: blur(3px); }
-.board-element.blurred.selected { filter: blur(0); }
 
 /* ============================================
    MODALS

@@ -57,6 +57,8 @@ export class MouseController {
       this._applyBlurAt(x, y);
     } else if (tool === 'text') {
       this.objectController.createText(x, y);
+    } else if (tool === 'select') {
+      this.board.deselectObject();
     }
   }
 

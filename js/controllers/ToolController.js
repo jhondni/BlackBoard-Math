@@ -15,6 +15,7 @@ export class ToolController {
     this.onRequestEquation = null;  // () => void
     this.onRequestGraph = null;      // () => void
     this.onRequestImage = null;      // () => void
+    this.onBlur = null;              // () => void -> borrar objeto selecionado
     this.onUndo = null;
     this.onRedo = null;
     this.onDeleteSelected = null;
@@ -37,6 +38,11 @@ export class ToolController {
     if (tool === 'equation') return this.onRequestEquation && this.onRequestEquation();
     if (tool === 'graph') return this.onRequestGraph && this.onRequestGraph();
     if (tool === 'image') return this.onRequestImage && this.onRequestImage();
+    if (tool === 'blur') {
+      this.toolbar.setTool(tool);
+      if (this.onBlur) this.onBlur();
+      return;
+    }
     this.toolbar.setTool(tool);
   }
 

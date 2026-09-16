@@ -64,6 +64,7 @@ export class BoardController {
     this.toolController.onRequestEquation = () => this.objectController.openEquationModal();
     this.toolController.onRequestGraph = () => this.objectController.openGraphModal();
     this.toolController.onRequestImage = () => this.$.imageUpload.click();
+    this.toolController.onBlur = () => this.blurSelectedObject();
     this.toolController.onUndo = () => this.undo();
     this.toolController.onRedo = () => this.redo();
     this.toolController.onDeleteSelected = () => this.objectController.handleDeleteSelected();
@@ -84,6 +85,12 @@ export class BoardController {
       this.commitHistory();
     };
     this.selectionView.onEditEquation = (obj) => this.objectController.openEquationModal(obj);
+    this.selectionView.onBlurObject = (obj, force) => {
+      obj.applyBlur(force !== undefined ? force : !obj.blurred);
+      this.board.deselectObject();
+      this.commitHistory();
+      this._saveState();
+    };
     this.selectionView.onCommitChange = () => this.commitHistory();
 
     // Biblioteca
@@ -355,6 +362,16 @@ export class BoardController {
       const curPage = this.board.currentPage;
       if (curPage && curPage.drawingData) this.boardView.drawBackground(curPage.drawingData);
     }, 450);
+  }
+
+  /* ---- Blur ---- */
+  blurSelectedObject() {
+    const obj = this.board.selectedObject;
+    if (!obj) return;
+    obj.applyBlur(true);
+    this.board.deselectObject();
+    this.commitHistory();
+    this._saveState();
   }
 
   /* ---- Modais de ajuda/export ---- */
