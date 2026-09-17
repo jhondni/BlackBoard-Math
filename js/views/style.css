@@ -1071,6 +1071,45 @@ body.dark-mode #whiteboard::before {
   font-weight: 500;
 }
 
+.template-selects {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.template-picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.template-picker .section-label {
+  margin-bottom: 6px;
+}
+
+.template-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition);
+}
+
+.template-select:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.template-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 /* ============================================
    GRAPH MODAL
    ============================================ */

@@ -21,6 +21,15 @@ export class MathEditorView {
       btn.addEventListener('click', () => this.insertTemplate(btn.dataset.latex));
     });
 
+    document.querySelectorAll('.template-select[data-insert]').forEach(select => {
+      select.addEventListener('change', () => {
+        if (select.value) {
+          this.insertTemplate(select.value);
+          select.value = '';
+        }
+      });
+    });
+
     if ($.insertEquationBtn) {
       $.insertEquationBtn.addEventListener('click', () => this.confirm());
     }
