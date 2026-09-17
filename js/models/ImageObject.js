@@ -35,8 +35,18 @@ export class ImageObject extends BoardObject {
     el.innerHTML = '';
     const img = document.createElement('img');
     img.src = this.src;
-    if (this.isGraph) img.style.maxWidth = '500px';
+    this._styleImage(img);
     el.appendChild(img);
+  }
+
+  /** Ajusta o estilo da imagem conforme o tipo (grafico ou imagem). */
+  _styleImage(img) {
+    if (this.isGraph) {
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'contain';
+      img.style.display = 'block';
+    }
   }
 
   render() {

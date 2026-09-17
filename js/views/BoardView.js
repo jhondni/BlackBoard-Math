@@ -52,10 +52,7 @@ export class BoardView {
       el.className = 'board-element text-element';
     } else if (obj instanceof ImageObject) {
       el.className = `board-element ${obj.isGraph ? 'graph-element' : 'image-element'}`;
-      const img = document.createElement('img');
-      img.src = obj.src;
-      if (obj.isGraph) img.style.maxWidth = '500px';
-      el.appendChild(img);
+      obj.toDOMContent(el);
     } else {
       el.className = 'board-element';
     }

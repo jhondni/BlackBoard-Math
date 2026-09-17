@@ -106,9 +106,8 @@ export class BoardController {
 
     // Insert grafico
     this.$.insertGraphBtn.addEventListener('click', () => {
-      this.objectController.insertGraph();
-      this.renderLibrary();
-      this.showToast('Grafico inserido');
+      const inserted = this.objectController.insertGraph();
+      if (inserted) this.showToast('Grafico inserido');
     });
 
     // Modais (fechar)

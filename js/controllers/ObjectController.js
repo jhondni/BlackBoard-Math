@@ -143,8 +143,10 @@ export class ObjectController {
    * @param {number} [x]
    * @param {number} [y]
    */
-  createImage(src, isGraph = false, x = 100, y = 100) {
+  createImage(src, isGraph = false, x = 100, y = 100, width, height) {
     const obj = this.board.createImage(src, x, y, isGraph);
+    if (width) obj.width = width;
+    if (height) obj.height = height;
     this.boardView.addObjectElement(obj);
     if (this.onCommit) this.onCommit();
     return obj;
@@ -182,36 +184,63 @@ export class ObjectController {
     if (this.graphCanvas) {
       this.graphCtx = this.graphCanvas.getContext('2d');
     }
-    if ($.graphFunction) $.graphFunction.addEventListener('input', () => this.drawGraphPreview());
+    // Atualiza o preview ao vivo para qualquer ajuste do grafico.
+    const controls = [
+      $.graphFunction, $.graphXmin, $.graphXmax,
+      $.graphYmin, $.graphYmax, $.graphColor, $.graphWidth
+    ];
+    controls.forEach((control) => {
+      if (control) control.addEventListener('input', () => this.drawGraphPreview());
+    });
   }
 
   openGraphModal() {
     this.drawGraphPreview();
     this.toolbox.$.graphModal.classList.remove('hidden');
+    const fn = this.toolbox.$.graphFunction;
+    if (fn) {
+      fn.focus();
+      fn.select();
+    }
   }
 
   insertGraph() {
     this.drawGraphPreview();
-    if (!this.graphCanvas) return;
-    this.createImage(this.graphCanvas.toDataURL(), true, 100, 100);
+    if (!this.graphCanvas) return null;
+
+    // Mantem a proporcao do preview ao inserir na lousa.
+    const srcW = this.graphCanvas.width;
+    const srcH = this.graphCanvas.height;
+    const width = 400;
+    const height = Math.round(width * (srcH / srcW));
+
+    const obj = this.createImage(this.graphCanvas.toDataURL('image/png'), true, 100, 100, width, height);
     this.toolbox.$.graphModal.classList.add('hidden');
+    return obj;
   }
 
   drawGraphPreview() {
     const $ = this.toolbox.$;
     const canvas = this.graphCanvas;
     const gctx = this.graphCtx;
-    if (!canvas) return;
+    if (!canvas || !gctx) return;
 
     const w = canvas.width;
     const h = canvas.height;
     gctx.clearRect(0, 0, w, h);
 
-    const funcStr = $.graphFunction.value || 'Math.sin(x)';
-    const xmin = parseFloat($.graphXmin.value) || -10;
-    const xmax = parseFloat($.graphXmax.value) || 10;
-    const ymin = parseFloat($.graphYmin.value) || -10;
-    const ymax = parseFloat($.graphYmax.value) || 10;
+    const funcStr = ($.graphFunction.value || 'Math.sin(x)').trim();
+    let xmin = parseFloat($.graphXmin.value);
+    let xmax = parseFloat($.graphXmax.value);
+    let ymin = parseFloat($.graphYmin.value);
+    let ymax = parseFloat($.graphYmax.value);
+    if (!isFinite(xmin)) xmin = -10;
+    if (!isFinite(xmax)) xmax = 10;
+    if (!isFinite(ymin)) ymin = -10;
+    if (!isFinite(ymax)) ymax = 10;
+    if (xmax <= xmin) xmax = xmin + 1;
+    if (ymax <= ymin) ymax = ymin + 1;
+
     const color = $.graphColor.value;
     const lineW = parseInt($.graphWidth.value, 10) || 2;
 
@@ -237,45 +266,111 @@ export class ObjectController {
     // Grade
     gctx.strokeStyle = '#eee';
     gctx.lineWidth = 0.5;
-    const stepX = Math.ceil((xmax - xmin) / 20);
+    gctx.fillStyle = '#666';
+    gctx.font = '10px sans-serif';
+    const axisY = (ymin <= 0 && ymax >= 0) ? toScreenY(0) : h;
+    const axisX = (xmin <= 0 && xmax >= 0) ? toScreenX(0) : 0;
+    const stepX = Math.ceil((xmax - xmin) / 20) || 1;
     for (let x = Math.ceil(xmin); x <= xmax; x += stepX) {
       const sx = toScreenX(x);
       gctx.beginPath(); gctx.moveTo(sx, 0); gctx.lineTo(sx, h); gctx.stroke();
-      gctx.fillStyle = '#666'; gctx.font = '10px sans-serif';
-      gctx.fillText(x, sx + 2, toScreenY(0) - 4);
+      if (x !== 0) gctx.fillText(x, sx + 2, Math.min(h - 2, axisY + 11));
     }
-    const stepY = Math.ceil((ymax - ymin) / 15);
+    const stepY = Math.ceil((ymax - ymin) / 15) || 1;
     for (let y = Math.ceil(ymin); y <= ymax; y += stepY) {
       const sy = toScreenY(y);
       gctx.beginPath(); gctx.moveTo(0, sy); gctx.lineTo(w, sy); gctx.stroke();
-      if (y !== 0) {
-        gctx.fillStyle = '#666'; gctx.font = '10px sans-serif';
-        gctx.fillText(y, toScreenX(0) + 4, sy - 2);
-      }
+      if (y !== 0) gctx.fillText(y, Math.min(w - 16, axisX + 4), sy - 2);
     }
 
     // Plot da funcao
-    try {
-      const fn = new Function('x', 'return ' + funcStr);
+    const { fn, error } = this._computeFunction(funcStr);
+    if (error) {
+      gctx.fillStyle = '#e53935';
+      gctx.font = '14px sans-serif';
+      gctx.fillText(error, 20, 30);
+      return;
+    }
+    if (fn) {
       gctx.strokeStyle = color;
       gctx.lineWidth = lineW;
+      gctx.lineJoin = 'round';
       gctx.beginPath();
       let started = false;
-      for (let px = 0; px < w; px++) {
+      let plotted = 0;
+      for (let px = 0; px <= w; px++) {
         const x = xmin + (px / w) * (xmax - xmin);
         let y;
-        try { y = fn(x); } catch { continue; }
-        if (!isFinite(y) || Math.abs(y) > 1e6) { started = false; continue; }
+        try { y = fn(x); } catch { started = false; continue; }
+        if (typeof y !== 'number' || !isFinite(y)) { started = false; continue; }
         const sy = toScreenY(y);
         if (!started) { gctx.moveTo(px, sy); started = true; }
         else gctx.lineTo(px, sy);
+        plotted++;
       }
       gctx.stroke();
-    } catch (err) {
-      gctx.fillStyle = '#e53935';
-      gctx.font = '14px sans-serif';
-      gctx.fillText('Funcao invalida', 20, 30);
+      if (plotted === 0) {
+        gctx.fillStyle = '#e53935';
+        gctx.font = '14px sans-serif';
+        gctx.fillText('Sem valores no intervalo', 20, 30);
+      }
     }
+  }
+
+  /**
+   * Converte uma entrada de funcao/equacao em uma funcao JS f(x).
+   * Aceita JavaScript puro (Math.*) ou notacao matematica simples
+   * (x^2, 3x, 3.x, sen(x), pi) e equacoes com '=' (reduzidas a y=f(x)).
+   * @param {string} input
+   * @returns {{ fn: Function|null, error: string|null }}
+   */
+  _computeFunction(input) {
+    const raw = (input || '').trim();
+    if (!raw) return { fn: null, error: null };
+
+    // Equacao: reduz para uma unica expressao f(x).
+    let expr = raw;
+    if (expr.includes('=')) {
+      const parts = expr.split('=');
+      const lhs = (parts.shift() || '').trim();
+      const rhs = parts.join('=').trim();
+      if (lhs.toLowerCase() === 'y') expr = rhs;
+      else if (rhs === '0' || rhs === '') expr = lhs;
+      else expr = '(' + lhs + ') - (' + rhs + ')';
+    }
+
+    // JavaScript puro quando usa Math.*; caso contrario, traduz a notacao.
+    if (!/Math\./.test(expr)) expr = this._toMathExpression(expr);
+
+    try {
+      const fn = new Function('x', 'with (Math) { return (' + expr + '); }');
+      fn(1);
+      return { fn, error: null };
+    } catch (err) {
+      return { fn: null, error: 'Expressao invalida' };
+    }
+  }
+
+  /**
+   * Traduz notacao matematica comum para uma expressao JavaScript.
+   * @param {string} expr
+   * @returns {string}
+   */
+  _toMathExpression(expr) {
+    let out = expr;
+    out = out.replace(/\^/g, '**');
+    out = out.replace(/\bsen\b/gi, 'sin');
+    out = out.replace(/\bln\b/gi, 'log');
+    // Multiplicacao por ponto, sem confundir com decimal (ex.: 3.5).
+    out = out.replace(/([a-zA-Z)])\s*\.\s*([a-zA-Z0-9(])/g, '$1*$2');
+    out = out.replace(/(\d)\s*\.\s*([a-zA-Z(])/g, '$1*$2');
+    // Constante pi.
+    out = out.replace(/\bpi\b/gi, 'PI');
+    // Multiplicacao implicita: 3x, 3(x+1), (x+1)(x-1), 2sin(x), x(x+1).
+    out = out.replace(/(\d)\s*([a-zA-Z(])/g, '$1*$2');
+    out = out.replace(/(\))\s*([a-zA-Z0-9(])/g, '$1*$2');
+    out = out.replace(/\bx\s*\(/g, 'x*(');
+    return out;
   }
 
   /* ---- Biblioteca de equacoes ---- */
