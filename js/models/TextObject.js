@@ -34,7 +34,8 @@ export class TextObject extends BoardObject {
 
   /** Conteudo textual do elemento DOM (widget). */
   toDOMContent(el) {
-    this.textRenderer.applyText(el, this.text, {
+    const target = this.contentEl || el;
+    this.textRenderer.applyText(target, this.text, {
       fontSize: this.fontSize,
       color: this.color,
       editable: true

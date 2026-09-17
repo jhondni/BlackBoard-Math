@@ -50,10 +50,6 @@ export class BoardView {
       this.mathRenderer.render(obj.latex, el, { displayMode: true, throwOnError: false });
     } else if (obj instanceof TextObject) {
       el.className = 'board-element text-element';
-      el.contentEditable = 'true';
-      el.style.fontSize = obj.fontSize + 'px';
-      el.style.color = obj.color;
-      el.textContent = obj.text;
     } else if (obj instanceof ImageObject) {
       el.className = `board-element ${obj.isGraph ? 'graph-element' : 'image-element'}`;
       const img = document.createElement('img');
@@ -71,8 +67,27 @@ export class BoardView {
     el.style.height = obj.height + 'px';
     if (obj.rotation) el.style.transform = `rotate(${obj.rotation}deg)`;
 
+    // Texto: altura predefinida (50px minimo) com crescimento a partir do topo.
+    if (obj instanceof TextObject) {
+      el.style.height = Math.max(50, obj.height) + 'px';
+      el.style.minHeight = Math.max(50, obj.height) + 'px';
+    }
+
     // Aplica controles e estado
     this.buildControls(el, obj);
+
+    // Conteudo do texto: criado por ultimo para nao ser apagado pelos controles.
+    if (obj instanceof TextObject) {
+      const content = document.createElement('div');
+      content.className = 'text-element-content';
+      content.contentEditable = 'true';
+      content.style.fontSize = obj.fontSize + 'px';
+      content.style.color = obj.color;
+      content.textContent = obj.text;
+      el.appendChild(content);
+      obj.contentEl = content;
+    }
+
     if (obj.blurred) el.classList.add('blurred');
     if (obj.selected) el.classList.add('selected');
 

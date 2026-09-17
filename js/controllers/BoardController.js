@@ -85,6 +85,7 @@ export class BoardController {
       this.commitHistory();
     };
     this.selectionView.onEditEquation = (obj) => this.objectController.openEquationModal(obj);
+    this.selectionView.onEditText = (obj) => this.objectController.focusText(obj);
     this.selectionView.onBlurObject = (obj, force) => {
       obj.applyBlur(force !== undefined ? force : !obj.blurred);
       this.board.deselectObject();

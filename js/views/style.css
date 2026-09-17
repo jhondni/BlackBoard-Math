@@ -794,15 +794,37 @@ body.dark-mode #whiteboard::before {
 
 .text-element {
   padding: 4px 8px;
-  font-size: 18px;
-  color: var(--text-primary);
   min-width: 50px;
-  min-height: 24px;
-  outline: none;
-  line-height: 1.5;
+  min-height: 50px;
+  cursor: text;
 }
 
-.text-element:focus {
+.text-element-content {
+  width: 100%;
+  height: 100%;
+  font-size: 18px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  cursor: text;
+  outline: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.text-box-preview {
+  position: absolute;
+  border: 2px dashed var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-xs);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.text-element:focus-within {
   outline: 2px solid var(--accent);
   border-radius: var(--radius-xs);
 }

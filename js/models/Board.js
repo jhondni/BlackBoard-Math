@@ -112,8 +112,8 @@ export class Board {
     return this.addObject(obj);
   }
 
-  createText(x, y) {
-    const obj = new TextObject({ x, y, color: this.penColor, fontSize: 18, text: '' });
+  createText(x, y, width, height) {
+    const obj = new TextObject({ x, y, color: this.penColor, fontSize: 18, text: '', width, height });
     return this.addObject(obj);
   }
 

@@ -40,17 +40,100 @@ export class ObjectController {
   }
 
   /**
-   * Cria um elemento de texto editavel.
+   * Cria um elemento de texto editavel com as dimensoes da caixa.
    * @param {number} x
    * @param {number} y
+   * @param {number} [width]
+   * @param {number} [height]
    */
-  createText(x = 100, y = 100) {
-    const obj = this.board.createText(x, y);
-    const el = this.boardView.addObjectElement(obj);
-    el.contentEditable = 'true';
-    el.focus();
+  createText(x = 100, y = 100, width, height) {
+    const obj = this.board.createText(x, y, width, height);
+    this.boardView.addObjectElement(obj);
+    this.wireTextEditing(obj, obj.contentEl);
+    this.focusText(obj);
     if (this.onCommit) this.onCommit();
     return obj;
+  }
+
+  /**
+   * Foca um texto existente para edicao, posicionando o cursor no final.
+   * @param {TextObject} obj
+   */
+  focusText(obj) {
+    if (!obj || obj.type !== 'text') return;
+    const el = obj.contentEl || obj.dom;
+    if (!el) return;
+    el.contentEditable = 'true';
+    this.board.selectObject(obj);
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  /**
+   * Conecta os eventos de edicao (digitar, blur e teclas) ao texto.
+   * @param {TextObject} obj
+   * @param {HTMLElement} el
+   */
+  wireTextEditing(obj, el) {
+    if (el.dataset.textWired) return;
+    el.dataset.textWired = '1';
+
+    el.addEventListener('input', () => {
+      obj.text = el.textContent;
+      obj.content = el.textContent;
+    });
+
+    el.addEventListener('blur', () => this._finishTextEdit(obj, el));
+
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        el.blur();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        el.blur();
+        return;
+      }
+      if ((e.key === 'Backspace' || e.key === 'Delete') && !el.textContent.trim()) {
+        e.preventDefault();
+        this.removeObject(obj);
+      }
+    });
+  }
+
+  /**
+   * Finaliza a edicao: remove textos vazios, aplica o conteudo no modelo,
+   * redimensiona a caixa e registra no historico.
+   * @param {TextObject} obj
+   * @param {HTMLElement} el
+   */
+  _finishTextEdit(obj, el) {
+    const text = (el.textContent || '').trim();
+    if (!text) {
+      this.removeObject(obj);
+      return;
+    }
+    obj.text = el.textContent;
+    obj.content = el.textContent;
+    if (this.onCommit) this.onCommit();
+  }
+
+  /**
+   * Remove um objeto especifico da lousa.
+   * @param {object} obj
+   */
+  removeObject(obj) {
+    if (!obj) return;
+    this.boardView.removeObjectElement(obj);
+    this.board.removeObject(obj);
+    if (this.onCommit) this.onCommit();
   }
 
   /**
@@ -89,11 +172,7 @@ export class ObjectController {
 
   /* ---- Edicao / Remocao ---- */
   handleDeleteSelected() {
-    const obj = this.board.selectedObject;
-    if (!obj) return;
-    this.boardView.removeObjectElement(obj);
-    this.board.removeObject(obj);
-    if (this.onCommit) this.onCommit();
+    this.removeObject(this.board.selectedObject);
   }
 
   /* ---- Graficos ---- */

@@ -19,6 +19,7 @@ export class SelectionView {
     this.resizeStart = {};
 
     this.onEditEquation = null; // callback (obj) => void
+    this.onEditText = null; // callback (obj) => void -> editar texto (ferramenta texto)
     this.onDeleteObject = null; // callback (obj) => void
     this.onBlurObject = null; // callback (obj) => void
     this.onCommitChange = null; // callback () => void (salvar historico)
@@ -85,6 +86,22 @@ export class SelectionView {
   /* ---- Drag ---- */
   _onDragStart(e, el, obj) {
     const tool = this.getCurrentTool();
+
+    // Ferramenta de texto: clicar num texto (vazio ou nao) foca para edicao;
+    // acoes e handles continuam funcionando. Textos vazios sao removidos
+    // ao desfocar (blur) ou via Backspace/Delete.
+    if (tool === 'text') {
+      if (e.target.closest('.element-actions') || e.target.classList.contains('resize-handle')) {
+        return;
+      }
+      if (obj.type === 'text') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.onEditText) this.onEditText(obj);
+      }
+      return;
+    }
+
     if (tool === 'blur') {
       if (e.target.closest('.element-actions') || e.target.classList.contains('resize-handle')) return;
       e.stopPropagation();

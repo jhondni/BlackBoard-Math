@@ -17,6 +17,10 @@ export class MouseController {
     this.lastX = 0;
     this.lastY = 0;
 
+    // Desenho da caixa de texto (arrastar com a ferramenta texto)
+    this.textBoxDrag = null;   // { startX, startY, x, y }
+    this.textBoxPreview = null; // overlay <div>
+
     // Callback injetado pelo BoardController ao concluir desenho
     this.onStrokeEnd = null; // () => void
 
@@ -56,9 +60,46 @@ export class MouseController {
       this.isDrawing = true;
       this._applyBlurAt(x, y);
     } else if (tool === 'text') {
-      this.objectController.createText(x, y);
+      this._startTextBoxDrag(x, y, e);
     } else if (tool === 'select') {
       this.board.deselectObject();
+    }
+  }
+
+  /* ---- Caixa de texto (arrastar para dimensionar) ---- */
+  _startTextBoxDrag(x, y, e) {
+    this.isDrawing = true;
+    this.textBoxDrag = {
+      startX: x, startY: y, x, y,
+      sx0: e.clientX, sy0: e.clientY, // inicio em pixels de tela
+      sx: e.clientX, sy: e.clientY,   // posicao atual em pixels de tela
+    };
+    this._createTextBoxPreview();
+    this._updateTextBoxPreview();
+  }
+
+  _createTextBoxPreview() {
+    if (this.textBoxPreview) return;
+    const el = document.createElement('div');
+    el.className = 'text-box-preview';
+    this.boardView.elementsLayer.appendChild(el);
+    this.textBoxPreview = el;
+  }
+
+  _updateTextBoxPreview() {
+    const el = this.textBoxPreview;
+    const d = this.textBoxDrag;
+    if (!el || !d) return;
+    el.style.left = Math.min(d.startX, d.x) + 'px';
+    el.style.top = Math.min(d.startY, d.y) + 'px';
+    el.style.width = Math.max(4, Math.abs(d.x - d.startX)) + 'px';
+    el.style.height = Math.max(4, Math.abs(d.y - d.startY)) + 'px';
+  }
+
+  _removeTextBoxPreview() {
+    if (this.textBoxPreview) {
+      this.textBoxPreview.remove();
+      this.textBoxPreview = null;
     }
   }
 
@@ -75,6 +116,16 @@ export class MouseController {
   onMove(e) {
     if (!this.isDrawing) return;
     const { x, y } = this._toBoard(e);
+
+    if (this.textBoxDrag) {
+      this.textBoxDrag.x = x;
+      this.textBoxDrag.y = y;
+      this.textBoxDrag.sx = e.clientX;
+      this.textBoxDrag.sy = e.clientY;
+      this._updateTextBoxPreview();
+      return;
+    }
+
     const tool = this.toolbar.currentTool;
     const ctx = this.boardView.canvas.getContext('2d');
 
@@ -90,6 +141,30 @@ export class MouseController {
   onUp() {
     if (!this.isDrawing) return;
     this.isDrawing = false;
+
+    if (this.textBoxDrag) {
+      const drag = this.textBoxDrag;
+      this.textBoxDrag = null;
+      this._removeTextBoxPreview();
+
+      // Decisao em pixels de tela (independente de zoom): < 8px = clique.
+      const sw = Math.abs(drag.sx - drag.sx0);
+      const sh = Math.abs(drag.sy - drag.sy0);
+
+      if (sw < 8 && sh < 8) {
+        // Clique simples: caixa padrao 200x50 centralizada no clique.
+        this.objectController.createText(drag.startX - 100, drag.startY - 25, 200, 50);
+      } else {
+        // Arrastar e segurar: caixa do tamanho projetado (min 200x50).
+        const w = Math.abs(drag.x - drag.startX);
+        const h = Math.abs(drag.y - drag.startY);
+        const x = Math.min(drag.startX, drag.x);
+        const y = Math.min(drag.startY, drag.y);
+        this.objectController.createText(x, y, Math.max(200, w), Math.max(50, h));
+      }
+      return;
+    }
+
     const ctx = this.boardView.canvas.getContext('2d');
     ctx.closePath();
     if (this.onStrokeEnd) this.onStrokeEnd();
