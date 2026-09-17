@@ -151,17 +151,33 @@ export class SelectionView {
     const onMove = (ev) => {
       const dx = ev.clientX - this.resizeStart.x;
       const dy = ev.clientY - this.resizeStart.y;
+
+      // Minimos por tipo: textos respeitam o min-width/min-height de 50px.
+      const isText = obj.type === 'text';
+      const minW = isText ? 50 : 40;
+      const minH = isText ? 50 : 30;
+
       let newW = this.resizeStart.w;
       let newH = this.resizeStart.h;
+      let newX = this.resizeStart.elX;
+      let newY = this.resizeStart.elY;
 
-      if (this.resizeDir.includes('e')) newW = Math.max(40, this.resizeStart.w + dx);
-      if (this.resizeDir.includes('w')) newW = Math.max(40, this.resizeStart.w - dx);
-      if (this.resizeDir.includes('s')) newH = Math.max(30, this.resizeStart.h + dy);
-      if (this.resizeDir.includes('n')) newH = Math.max(30, this.resizeStart.h - dy);
+      if (this.resizeDir.includes('e')) newW = Math.max(minW, this.resizeStart.w + dx);
+      if (this.resizeDir.includes('s')) newH = Math.max(minH, this.resizeStart.h + dy);
+      if (this.resizeDir.includes('w')) {
+        newW = Math.max(minW, this.resizeStart.w - dx);
+        // Ancora a borda direita: a esquerda recua o quanto a largura diminuiu.
+        newX = this.resizeStart.elX + (this.resizeStart.w - newW);
+      }
+      if (this.resizeDir.includes('n')) {
+        newH = Math.max(minH, this.resizeStart.h - dy);
+        // Ancora a borda inferior: o topo desce o quanto a altura diminuiu.
+        newY = this.resizeStart.elY + (this.resizeStart.h - newH);
+      }
 
       obj.resize(newW, newH);
-      if (this.resizeDir.includes('w')) obj.x = this.resizeStart.elX + dx;
-      if (this.resizeDir.includes('n')) obj.y = this.resizeStart.elY + dy;
+      if (this.resizeDir.includes('w')) obj.x = newX;
+      if (this.resizeDir.includes('n')) obj.y = newY;
 
       // Escala o KaTeX dentro de equacoes ao redimensionar
       const katexEl = el.querySelector('.katex');

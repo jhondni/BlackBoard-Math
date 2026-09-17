@@ -67,10 +67,10 @@ export class BoardView {
     el.style.height = obj.height + 'px';
     if (obj.rotation) el.style.transform = `rotate(${obj.rotation}deg)`;
 
-    // Texto: altura predefinida (50px minimo) com crescimento a partir do topo.
+    // Texto: altura predefinida (piso de 50px) com crescimento a partir do topo.
     if (obj instanceof TextObject) {
       el.style.height = Math.max(50, obj.height) + 'px';
-      el.style.minHeight = Math.max(50, obj.height) + 'px';
+      el.style.minHeight = '50px';
     }
 
     // Aplica controles e estado
