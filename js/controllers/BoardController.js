@@ -44,6 +44,9 @@ export class BoardController {
     this.renderLibrary();
     this._switchPage(this.board.currentPageIndex);
     this._applyTheme();
+
+    // Centraliza a folha apos o layout assentar (fonts, canvas e zoom).
+    requestAnimationFrame(() => requestAnimationFrame(() => this.boardView.centerOnPage()));
   }
 
   /** Interligacao entre controllers/views. */

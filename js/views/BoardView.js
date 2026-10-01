@@ -203,6 +203,38 @@ export class BoardView {
   }
 
   /**
+   * Centraliza a pagina na area visivel do workspace.
+   *
+   * O `margin: auto` do container so centraliza quando a pagina cabe
+   * inteira. Acima disso ele vira 0 e a pagina encosta no topo. Aqui a
+   * rolagem e ajustada para que o centro da pagina coincida com o centro
+   * da area util, distribuindo o excedente de forma igual.
+   */
+  centerOnPage() {
+    const workspace = this.$.workspace;
+    const wb = this.$.whiteboard;
+    if (!workspace || !wb) return;
+
+    const br = wb.getBoundingClientRect();
+    const cs = getComputedStyle(workspace);
+    const padL = parseFloat(cs.paddingLeft);
+    const padR = parseFloat(cs.paddingRight);
+    const padT = parseFloat(cs.paddingTop);
+    const padB = parseFloat(cs.paddingBottom);
+
+    const innerW = workspace.clientWidth - padL - padR;
+    const innerH = workspace.clientHeight - padT - padB;
+    if (innerW <= 0 || innerH <= 0) return;
+
+    // Centro da pagina em coordenadas de conteudo (scroll + posicao atual).
+    const cx = (br.left - workspace.getBoundingClientRect().left) + workspace.scrollLeft + br.width / 2;
+    const cy = (br.top - workspace.getBoundingClientRect().top) + workspace.scrollTop + br.height / 2;
+
+    workspace.scrollLeft = Math.max(0, cx - (padL + innerW / 2));
+    workspace.scrollTop = Math.max(0, cy - (padT + innerH / 2));
+  }
+
+  /**
    * Alterna a orientacao (retrato/paisagem).
    * @param {boolean} landscape
    */
@@ -211,7 +243,10 @@ export class BoardView {
     wb.classList.toggle('landscape', landscape);
     // A largura/altura tem transicao de 0.4s, entao o container so pode ser
     // redimensionado com a dimensao final, depois do termino da animacao.
-    const sync = () => this.applyWorkspaceMargin(this.board.zoom);
+    const sync = () => {
+      this.applyWorkspaceMargin(this.board.zoom);
+      this.centerOnPage();
+    };
     wb.addEventListener('transitionend', sync, { once: true });
     setTimeout(sync, 450);
   }
