@@ -214,35 +214,67 @@ export class ObjectController {
     const width = 400;
     const height = Math.round(width * (srcH / srcW));
 
-    const obj = this.createImage(this.graphCanvas.toDataURL('image/png'), true, 100, 100, width, height);
+    const src = this.graphCanvas.toDataURL('image/png');
+    const obj = this.createImage(src, true, 100, 100, width, height);
+    // Guarda aformula e os limites para permitir re-renderizar em alta
+    // resolucao ao redimensionar, em vez de esticar o PNG de 500x350.
+    if (obj) obj.graphSpec = this._currentGraphSpec();
     this.toolbox.$.graphModal.classList.add('hidden');
     return obj;
   }
 
-  drawGraphPreview() {
+  /** Le os parametros atuais do grafico do formulario. */
+  _currentGraphSpec() {
+    const $ = this.toolbox.$;
+    const num = (el, fallback) => {
+      const v = parseFloat(el && el.value);
+      return isFinite(v) ? v : fallback;
+    };
+    return {
+      funcStr: (($.graphFunction && $.graphFunction.value) || 'Math.sin(x)').trim(),
+      xmin: num($.graphXmin, -10),
+      xmax: num($.graphXmax, 10),
+      ymin: num($.graphYmin, -10),
+      ymax: num($.graphYmax, 10),
+      color: ($.graphColor && $.graphColor.value) || '#2196f3',
+      lineW: parseInt($.graphWidth && $.graphWidth.value, 10) || 2
+    };
+  }
+
+  /**
+   * Desenha o grafico num canvas.
+   * @param {object} [spec] - Parametros; usa o formulario quando omitido.
+   * @param {{width:number,height:number}} [size] - Dimensao alvo do canvas.
+   * @returns {string|null} data URL do resultado.
+   */
+  drawGraphPreview(spec = null, size = null) {
     const $ = this.toolbox.$;
     const canvas = this.graphCanvas;
     const gctx = this.graphCtx;
-    if (!canvas || !gctx) return;
+    if (!canvas || !gctx) return null;
+
+    if (size) {
+      canvas.width = Math.max(1, Math.round(size.width));
+      canvas.height = Math.max(1, Math.round(size.height));
+    }
 
     const w = canvas.width;
     const h = canvas.height;
+
+    const source = spec || this._currentGraphSpec();
+    const { funcStr, color, lineW } = source;
+    let xmin = source.xmin;
+    let xmax = source.xmax;
+    let ymin = source.ymin;
+    let ymax = source.ymax;
     gctx.clearRect(0, 0, w, h);
 
-    const funcStr = ($.graphFunction.value || 'Math.sin(x)').trim();
-    let xmin = parseFloat($.graphXmin.value);
-    let xmax = parseFloat($.graphXmax.value);
-    let ymin = parseFloat($.graphYmin.value);
-    let ymax = parseFloat($.graphYmax.value);
     if (!isFinite(xmin)) xmin = -10;
     if (!isFinite(xmax)) xmax = 10;
     if (!isFinite(ymin)) ymin = -10;
     if (!isFinite(ymax)) ymax = 10;
     if (xmax <= xmin) xmax = xmin + 1;
     if (ymax <= ymin) ymax = ymin + 1;
-
-    const color = $.graphColor.value;
-    const lineW = parseInt($.graphWidth.value, 10) || 2;
 
     gctx.fillStyle = '#ffffff';
     gctx.fillRect(0, 0, w, h);
@@ -289,7 +321,7 @@ export class ObjectController {
       gctx.fillStyle = '#e53935';
       gctx.font = '14px sans-serif';
       gctx.fillText(error, 20, 30);
-      return;
+      return null;
     }
     if (fn) {
       gctx.strokeStyle = color;
@@ -315,6 +347,8 @@ export class ObjectController {
         gctx.fillText('Sem valores no intervalo', 20, 30);
       }
     }
+
+    return canvas.toDataURL('image/png');
   }
 
   /**

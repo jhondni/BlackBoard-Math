@@ -23,6 +23,7 @@ export class SelectionView {
     this.onDeleteObject = null; // callback (obj) => void
     this.onBlurObject = null; // callback (obj) => void
     this.onCommitChange = null; // callback () => void (salvar historico)
+    this.objectController = null; // permite re-render de graficos/imagens
 
     // Getter da ferramenta ativa (injetado pelo app.js).
     // Permite que apenas a ferramenta 'select' mova os objetos.
@@ -191,6 +192,9 @@ export class SelectionView {
       this.resizing = false;
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      if (obj && obj.rerender && this.objectController) {
+        obj.rerender(this.objectController);
+      }
       if (this.onCommitChange) this.onCommitChange();
     };
 

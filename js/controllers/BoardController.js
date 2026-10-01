@@ -96,6 +96,7 @@ export class BoardController {
       this._saveState();
     };
     this.selectionView.onCommitChange = () => this.commitHistory();
+    this.selectionView.objectController = this.objectController;
 
     // Biblioteca
     this.$.saveToLibraryBtn.addEventListener('click', () => {
