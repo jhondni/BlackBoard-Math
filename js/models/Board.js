@@ -15,7 +15,7 @@ export class Board {
   constructor(init = {}) {
     this._objects = [];
     this._selectedObject = null;
-    this.zoom = init.zoom || 1;
+    this.zoom = init.zoom ?? 0.8;
     this.offsetX = init.offsetX || 0;
     this.offsetY = init.offsetY || 0;
 

@@ -27,6 +27,7 @@ export class ToolController {
     this.toolbar.onUndo = () => this.onUndo && this.onUndo();
     this.toolbar.onRedo = () => this.onRedo && this.onRedo();
     this.toolbar.onZoomChange = (delta) => this.changeZoom(delta);
+    this.setZoom(this.board.zoom);
     this._bindKeyboard();
   }
 

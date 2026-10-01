@@ -12,6 +12,9 @@ import { TextObject } from '../models/TextObject.js';
 import { ImageObject } from '../models/ImageObject.js';
 
 export class BoardView {
+  /** 2cm em pixels de tela a 96dpi. */
+  static MIN_MARGIN_PX = 75.6;
+
   constructor(board, elements) {
     this.board = board;
     this.$ = elements; // { whiteboard, canvas, elementsLayer }
@@ -163,7 +166,40 @@ export class BoardView {
     const wb = this.$.whiteboard;
     wb.style.transform = `scale(${zoom})`;
     wb.style.transformOrigin = 'center center';
+    this.applyWorkspaceMargin(zoom);
     if (this.$.zoomLevel) this.$.zoomLevel.textContent = Math.round(zoom * 100) + '%';
+  }
+
+  /**
+   * Garante 2cm (75.6px a 96dpi) de margem real em volta da pagina.
+   *
+   * Dois ajustes sao necessarios porque `transform: scale()` e apenas
+   * visual: ele nao altera o tamanho de layout do elemento.
+   *
+   * 1. O padding do workspace define a margem de 2cm em pixels de tela,
+   *    ja que o workspace nao sofre o `scale()` da pagina.
+   * 2. O container recebe a dimensao ja escalada, senao acima de 100% o
+   *    workspace ainda reservaria apenas o tamanho base da pagina e a
+   *    margem ficaria sem espaco de rolagem.
+   *
+   * @param {number} zoom
+   */
+  applyWorkspaceMargin(zoom) {
+    const workspace = this.$.workspace;
+    if (!workspace) return;
+    // O padding fica no workspace, que NAO e escalado por `transform`,
+    // entao a margem de 2cm vale em pixels de tela diretos e independe do
+    // zoom. Dividir por `zoom` encolheria justamente nos zooms maiores.
+    workspace.style.setProperty('--zoom-margin', `${BoardView.MIN_MARGIN_PX}px`);
+
+    const wb = this.$.whiteboard;
+    const container = this.$.canvasContainer || wb.parentElement;
+    if (container) {
+      // Transform nao altera o layout: sem isso o workspace continuaria
+      // reservando o tamanho base da pagina e a margem sumiria acima de 100%.
+      container.style.width = `${wb.offsetWidth * zoom}px`;
+      container.style.height = `${wb.offsetHeight * zoom}px`;
+    }
   }
 
   /**
@@ -171,7 +207,13 @@ export class BoardView {
    * @param {boolean} landscape
    */
   setOrientation(landscape) {
-    this.$.whiteboard.classList.toggle('landscape', landscape);
+    const wb = this.$.whiteboard;
+    wb.classList.toggle('landscape', landscape);
+    // A largura/altura tem transicao de 0.4s, entao o container so pode ser
+    // redimensionado com a dimensao final, depois do termino da animacao.
+    const sync = () => this.applyWorkspaceMargin(this.board.zoom);
+    wb.addEventListener('transitionend', sync, { once: true });
+    setTimeout(sync, 450);
   }
 
   /**

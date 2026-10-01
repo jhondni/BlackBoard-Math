@@ -633,12 +633,10 @@ body {
 #workspace {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: auto;
-  padding: 40px;
-  padding-left: calc(var(--sidebar-width) + 40px);
-  padding-right: 80px;
+  padding: var(--zoom-margin, 40px);
+  padding-left: calc(var(--sidebar-width) + var(--zoom-margin, 40px));
+  padding-right: calc(80px + var(--zoom-margin, 40px));
   background: var(--bg-base);
   transition: background var(--transition), padding var(--transition);
 }
@@ -648,6 +646,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  /* `margin: auto` centraliza quando ha sobra e vira 0 quando a pagina
+     transborda, garantindo que a margem continue rolavel em qualquer zoom. */
+  margin: auto;
 }
 
 /* ============================================
@@ -655,6 +657,7 @@ body {
    ============================================ */
 #whiteboard {
   position: relative;
+  flex: 0 0 auto;
   width: var(--page-width);
   height: var(--page-height);
   background: var(--bg-canvas);
@@ -1410,8 +1413,8 @@ kbd {
 @media (max-width: 600px) {
   #pages-sidebar { transform: translateX(-100%); }
   #pages-sidebar.open { transform: translateX(0); }
-  #workspace { padding: 10px; padding-left: 10px; }
-  #whiteboard { transform: scale(0.45); transform-origin: top left; }
+  #whiteboard { transform-origin: top left; }
+  #workspace { padding: var(--zoom-margin, 10px); padding-left: var(--zoom-margin, 10px); padding-right: calc(40px + var(--zoom-margin, 10px)); }
   #toolbar { bottom: 12px; padding: 4px 6px; }
   #controls-bar { right: 8px; top: auto; bottom: 80px; transform: none; flex-direction: row; }
   .zoom-pill { flex-direction: row; }
