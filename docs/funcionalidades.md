@@ -15,9 +15,19 @@
 
 ### Gráficos
 - **Criar gráfico** (`G`) — modal com função `f(x)`, domínio (xmin/xmax/ymin/ymax), cor e largura; preview em canvas e inserção na lousa.
+- **Repintado sob demanda** — o gráfico é rasterizado na densidade de pixels que o zoom atual exige (até o teto de área do cache), a partir da `graphSpec` salva com o objeto.
 
 ### Imagens
 - **Inserir imagem** (`I`) — upload por arquivo ou **drag & drop** de imagens na área de trabalho.
+- **Tamanho natural** — a imagem entra com as dimensões originais, limitadas a **1600 px no maior lado** para não estourar memória e o `localStorage`.
+- **Bitmap sob demanda** — o bitmap em cache é ampliado a partir do original quando o zoom pede mais pixels que ele tem, e **nunca** para além da resolução nativa (acima disso só haveria interpolação). O `originalSrc` não é sobrescrito em nenhum momento.
+
+### Nitidez no zoom
+- **Por que o zoom borrava** — o zoom é um `transform: scale()`, que não cria pixels: o navegador apenas interpola o bitmap existente.
+- **Imagens e gráficos** — mantêm dois bitmaps: `originalSrc` (teto) e `src` (cache). Cada objeto decide sozinho se precisa regenerar (`needsRerender`), e o trabalho é adiado por um debounce de 80 ms para que um `Ctrl+Scroll` contínuo não dispare dezenas de repaints.
+- **Desenho livre** — o canvas de tinta é reservado em alta resolução (limites de 5× a escala e ~12 M pixels) em vez de acompanhar o tamanho exibido; coordenadas, espessura de traço e borrão são convertidas para esse buffer.
+- **Persistência da tinta** — o raster salvo no `localStorage` é limitado a 2× a resolução da página, e não ao buffer gigante da tela.
+- **Teto de qualidade** — nenhuma técnica recupera detalhe que não existe na origem: imagens não nativas continuam indefinidas acima da resolução original, e a troca de orientação reescala o raster do desenho.
 
 ### Lousa / organização
 - **Múltiplas páginas** — barra lateral com adicionar, alternar e remover páginas; miniaturas.
@@ -29,6 +39,7 @@
 ### Persistência, histórico e exportação
 - **Undo/Redo** — `Ctrl+Z` / `Ctrl+Y` (até 50 passos).
 - **Salvar automaticamente** no `localStorage` (`lousa-state`).
+- **Aviso de cota** — quando o `localStorage` estoura (`QuotaExceededError`), a lousa avisa uma única vez em vez de falhar em silêncio.
 - **Exportar** — **PDF**, **PNG** e **Projeto JSON** (modal de exportação).
 - **Importar** projeto JSON (arquivo ou drag & drop).
 

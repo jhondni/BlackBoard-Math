@@ -434,21 +434,17 @@ body {
   border-color: var(--accent);
 }
 
+/* A miniatura e pintada como `background-image` a partir de um canvas
+   reduzido pelo BoardController, e nao por um <img> com a pagina
+   inteira. */
 .page-thumb {
   width: 44px;
   height: 58px;
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
-  background: white;
-  overflow: hidden;
+  background: white center / cover no-repeat;
   flex-shrink: 0;
   box-shadow: var(--shadow-xs);
-}
-
-.page-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .page-info {
@@ -832,16 +828,16 @@ body.dark-mode #whiteboard::before {
   border-radius: var(--radius-xs);
 }
 
-.image-element img {
-  max-width: 100%;
-  max-height: 100%;
+/* Imagens e graficos: o bitmap preenche a caixa inteira.
+   Sem `max-width/max-height` aqui, o `object-fit` mapeia cada pixel do
+   cache numa area conhecida, o que permite ao ImageObject saber a
+   densidade real do bitmap exibido. */
+.image-element img,
+.graph-element img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   display: block;
-}
-
-.graph-element canvas {
-  display: block;
-  border-radius: var(--radius-sm);
-  background: white;
 }
 
 .board-element.blurred { filter: blur(8px); }

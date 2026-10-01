@@ -18,6 +18,7 @@ export class ToolController {
     this.onBlur = null;              // () => void -> borrar objeto selecionado
     this.onUndo = null;
     this.onRedo = null;
+    this.onZoomChange = null;   // () => void -> bitmaps podem precisar de mais pixels
     this.onDeleteSelected = null;
     this.onEscape = null;
   }
@@ -49,10 +50,7 @@ export class ToolController {
 
   /* ---- Zoom ---- */
   changeZoom(delta) {
-    const next = Math.min(3, Math.max(0.25, this.board.zoom + delta));
-    this.board.zoom = next;
-    this.boardView.applyZoom(next);
-    this.toolbar.updateZoomLabel(next);
+    this.setZoom(this.board.zoom + delta);
   }
 
   setZoom(value) {
@@ -60,6 +58,9 @@ export class ToolController {
     this.board.zoom = next;
     this.boardView.applyZoom(next);
     this.toolbar.updateZoomLabel(next);
+    // `scale()` nao cria pixels: quem tem bitmap rasterizado precisa
+    // refaze-lo na densidade do novo zoom.
+    if (this.onZoomChange) this.onZoomChange(next);
   }
 
   /* ---- Atalhos de teclado ---- */

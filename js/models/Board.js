@@ -117,8 +117,17 @@ export class Board {
     return this.addObject(obj);
   }
 
-  createImage(src, x, y, isGraph = false) {
-    const obj = new ImageObject({ src, x, y, isGraph });
+  /**
+   * Cria um objeto de imagem.
+   * @param {string} src
+   * @param {number} x
+   * @param {number} y
+   * @param {boolean} [isGraph]
+   * @param {object} [opts] - width, height, naturalWidth, naturalHeight,
+   *   graphSpec e renderedScale (ver ImageObject).
+   */
+  createImage(src, x, y, isGraph = false, opts = {}) {
+    const obj = new ImageObject({ src, x, y, isGraph, ...opts });
     return this.addObject(obj);
   }
 

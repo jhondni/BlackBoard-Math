@@ -14,6 +14,12 @@ import { ImageObject } from '../models/ImageObject.js';
 export class BoardView {
   /** 2cm em pixels de tela a 96dpi. */
   static MIN_MARGIN_PX = 75.6;
+  /** Densidade maxima do canvas de desenho (px por px de lousa). */
+  static MAX_DRAWING_SCALE = 5;
+  /** Teto de pixels do backing store do canvas de desenho (~48MB RGBA). */
+  static MAX_DRAWING_PIXELS = 12e6;
+  /** Densidade com que o desenho e serializado no localStorage. */
+  static SAVE_DRAWING_SCALE = 2;
 
   constructor(board, elements) {
     this.board = board;
@@ -22,6 +28,9 @@ export class BoardView {
     // Dependencias injetadas (renderizacao e manipulacao)
     this.mathRenderer = null;
     this.selectionView = null;
+
+    // Fator px do canvas / px da lousa (ver resizeDrawingCanvas).
+    this.drawingScale = 1;
 
     this.subscribe();
   }
@@ -171,6 +180,61 @@ export class BoardView {
   }
 
   /**
+   * Dimensiona o backing store de `#drawing-canvas` para que cada pixel
+   * de tinta corresponda a um pixel de TELA, e nao a um pixel de
+   * documento escalado.
+   *
+   * O canvas ocupa `offsetWidth` px de CSS dentro de um whiteboard com
+   * `transform: scale(zoom)`, logo a area de tela e `offsetWidth * zoom`.
+   * Multiplicar tambem pelo `devicePixelRatio` evita perda de detalhe em
+   * telas retina.
+   *
+   * O buffer e sempre reservado na densidade MAXIMA, e nao na do zoom
+   * atual. Se crescesse junto com o zoom, cada ampliacao apagaria a
+   * tinta anterior (o canvas e limpo ao trocar `width`) e so sobraria
+   * um raster ampliado, que e exatamente a perda que se quer evitar.
+   * O preco e memoria fixa, limitada por `MAX_DRAWING_PIXELS`; acima do
+   * limite de nitidez o navegador apenas interpola, como antes.
+   *
+   * O `offsetWidth` e usado de proposito: `getBoundingClientRect()`
+   * ja devolveria o valor multiplicado pelo zoom e a pagina acabaria
+   * quadrada no zoom.
+   *
+   * @returns {{scale:number, resized:boolean}} fator px do canvas por px
+   *   da lousa, e se o backing store foi realmente redimensionado
+   *   (redimensionar limpa o canvas).
+   */
+  resizeDrawingCanvas() {
+    const canvas = this.canvas;
+    const wb = this.$.whiteboard;
+    if (!canvas || !wb) return { scale: 1, resized: false };
+
+    const boardW = Math.max(1, Math.round(wb.offsetWidth));
+    const boardH = Math.max(1, Math.round(wb.offsetHeight));
+
+    const budget = Math.sqrt(BoardView.MAX_DRAWING_PIXELS / (boardW * boardH));
+    const scale = Math.max(0.25, Math.min(BoardView.MAX_DRAWING_SCALE, budget));
+
+    const targetW = Math.max(1, Math.round(boardW * scale));
+    const targetH = Math.max(1, Math.round(boardH * scale));
+
+    // Atribuir `width`/`height` limpa o canvas, entao so acontece na
+    // inicializacao ou quando a pagina muda de tamanho.
+    const resized = canvas.width !== targetW || canvas.height !== targetH;
+    if (resized) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+    this.drawingScale = targetW / boardW;
+    return { scale: this.drawingScale, resized };
+  }
+
+  /** Tamanho do canvas de desenho em pixels de tela (alias do fator). */
+  get drawingCanvasScale() {
+    return this.drawingScale;
+  }
+
+  /**
    * Garante 2cm (75.6px a 96dpi) de margem real em volta da pagina.
    *
    * Dois ajustes sao necessarios porque `transform: scale()` e apenas
@@ -256,19 +320,50 @@ export class BoardView {
    */
   clearCanvas() {
     const ctx = this.canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   /**
-   * Desenha uma imagem de dados no canvas de desenho.
+   * Desenha uma imagem de dados no canvas de desenho, preenchendo
+   * todo o backing store (qualquer que seja a sua densidade).
    * @param {string} dataURL
    */
   drawBackground(dataURL) {
     const ctx = this.canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     if (!dataURL) return;
     const img = new Image();
-    img.onload = () => ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
+    img.onload = () => {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
+    };
     img.src = dataURL;
+  }
+
+  /**
+   * Serializa o desenho para persistencia numa densidade limitada.
+   *
+   * O buffer em alta resolucao daria um PNG de dezenas de MB dentro de
+   * um localStorage de ~5 MB. Reduzir para `SAVE_DRAWING_SCALE` mantem a
+   * pagina utilizavel apos recarregar sem estourar a cota; o que se
+   * perde e detalhe de tinta, nao o conteudo.
+   *
+   * @returns {string} data URL
+   */
+  exportDrawing() {
+    const canvas = this.canvas;
+    const scale = Math.min(this.drawingScale || 1, BoardView.SAVE_DRAWING_SCALE);
+    if (scale >= (this.drawingScale || 1) - 0.01) return canvas.toDataURL('image/png');
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(canvas.width / this.drawingScale * scale));
+    out.height = Math.max(1, Math.round(canvas.height / this.drawingScale * scale));
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, 0, 0, out.width, out.height);
+    return out.toDataURL('image/png');
   }
 }

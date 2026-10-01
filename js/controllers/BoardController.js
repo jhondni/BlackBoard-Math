@@ -12,6 +12,12 @@ import { TextObject } from '../models/TextObject.js';
 import { ImageObject } from '../models/ImageObject.js';
 
 export class BoardController {
+  /** Espera (ms) antes de refazer bitmaps apos uma troca de zoom. */
+  static QUALITY_DEBOUNCE_MS = 80;
+
+  /** Ja avisou que o localStorage estourou (evita toast repetido). */
+  #quotaWarned = false;
+
   constructor(board, boardView, toolbar, mathEditor,
     toolController, mouseController, objectController, selectionView, $) {
     this.board = board;
@@ -24,10 +30,10 @@ export class BoardController {
     this.selectionView = selectionView;
     this.$ = $;
 
+    this._thumbs = new WeakMap();
+
     this.STORAGE_KEY = 'lousa-state';
   }
-
-  #prevSizes = null;
 
   init() {
     this._loadState();
@@ -47,6 +53,8 @@ export class BoardController {
 
     // Centraliza a folha apos o layout assentar (fonts, canvas e zoom).
     requestAnimationFrame(() => requestAnimationFrame(() => this.boardView.centerOnPage()));
+    // Garante os bitmaps na densidade inicial do zoom.
+    this.refreshImageQuality();
   }
 
   /** Interligacao entre controllers/views. */
@@ -72,6 +80,8 @@ export class BoardController {
     this.toolController.onRedo = () => this.redo();
     this.toolController.onDeleteSelected = () => this.objectController.handleDeleteSelected();
     this.toolController.onEscape = () => this.handleEscape();
+    // Cada mudanca de zoom pode exigir mais pixels nos bitmaps.
+    this.toolController.onZoomChange = () => this.refreshImageQuality();
 
     // Object controller
     this.objectController.onCommit = () => this.commitHistory();
@@ -97,6 +107,8 @@ export class BoardController {
     };
     this.selectionView.onCommitChange = () => this.commitHistory();
     this.selectionView.objectController = this.objectController;
+    // Redimensionar muda a densidade exigida do bitmap.
+    this.selectionView.onResized = (obj) => this.refreshObjectQuality(obj);
 
     // Biblioteca
     this.$.saveToLibraryBtn.addEventListener('click', () => {
@@ -130,14 +142,63 @@ export class BoardController {
   /* ---- Canvas resize ---- */
   _setupCanvasResize() {
     const resize = () => {
-      const rect = this.$.whiteboard.getBoundingClientRect();
-      this.boardView.canvas.width = rect.width;
-      this.boardView.canvas.height = rect.height;
+      // O backing store do canvas e reservado na densidade maxima
+      // (ver BoardView.resizeDrawingCanvas), entao nao depende do zoom:
+      // redimensionar a janela raramente o altera. Quando altera, o
+      // canvas e limpo e a pagina precisa ser redesenhada por cima.
+      const { resized } = this.boardView.resizeDrawingCanvas();
+      if (!resized) return;
       const page = this.board.currentPage;
+      this.boardView.clearCanvas();
       if (page && page.drawingData) this.boardView.drawBackground(page.drawingData);
     };
     resize();
     window.addEventListener('resize', resize);
+  }
+
+  /**
+   * Regenera o bitmap das imagens e graficos cujo cache esta abaixo da
+   * densidade de pixels que o zoom atual exige.
+   *
+   * O `transform: scale()` do zoom nao cria pixels: sem regenerar o
+   * cache, o navegador apenas interpola o bitmap existente. O trabalho
+   * e adiado por um debounce para que um `Ctrl+Scroll` continuo nao
+   * dispare dezenas de repaints, e cada objeto decide sozinho se precisa
+   * (so re-renderiza quando o ganho e real).
+   *
+   * Fica num `setTimeout`, e nao num `requestAnimationFrame`: repintar
+   * canvas e um trabalho bloqueante, e fazê-lo dentro do frame atrasaria o
+   * proprio paint que o zoom esta solicitando.
+   */
+  refreshImageQuality() {
+    clearTimeout(this._qualityTimer);
+    this._qualityTimer = setTimeout(() => {
+      const zoom = this.board.zoom;
+      this.board.objects.forEach((obj) => {
+        if (typeof obj.needsRerender !== 'function') return;
+        if (!obj.needsRerender(zoom)) return;
+        const done = obj.rerender(this.objectController, zoom);
+        if (done && typeof done.then === 'function') {
+          done.then((changed) => { if (changed) this._saveState(); });
+        } else if (done) {
+          this._saveState();
+        }
+      });
+    }, BoardController.QUALITY_DEBOUNCE_MS);
+  }
+
+  /**
+   * Regenera o cache de um objeto especifico (apos resize/insercao).
+   * @param {object} obj
+   */
+  refreshObjectQuality(obj) {
+    if (!obj || typeof obj.rerender !== 'function') return;
+    const done = obj.rerender(this.objectController, this.board.zoom);
+    if (done && typeof done.then === 'function') {
+      done.then((changed) => { if (changed) this._saveState(); });
+    } else if (done) {
+      this._saveState();
+    }
   }
 
   /* ---- Zoom (scroll) ---- */
@@ -203,7 +264,9 @@ export class BoardController {
   _saveCurrentPage() {
     const page = this.board.currentPage;
     if (!page) return;
-    page.drawingData = this.boardView.canvas.toDataURL();
+    // O desenho e serializado numa densidade limitada: o buffer em alta
+    // resolucao geraria um PNG de dezenas de MB no localStorage.
+    page.drawingData = this.boardView.exportDrawing();
     page.elements = this.board.objects.map(o => o.toJSON());
     page.objects = page.elements;
     this._saveState();
@@ -238,13 +301,17 @@ export class BoardController {
       const item = document.createElement('div');
       item.className = `page-item ${i === this.board.currentPageIndex ? 'active' : ''}`;
       item.innerHTML = `
-        <div class="page-thumb"><img src="${page.drawingData || ''}" alt=""></div>
+        <div class="page-thumb"></div>
         <div class="page-info">
           <div class="page-name">${page.name}</div>
           <div class="page-number">Pagina ${i + 1}</div>
         </div>
         <button class="page-delete-btn" data-index="${i}" title="Remover">&times;</button>
       `;
+      // `drawingData` e um raster de pagina inteira; reduzi-lo para a
+      // miniatura evita decodificar uma imagem grande para uma caixa de
+      // poucos pixels.
+      this._renderPageThumb(item.querySelector('.page-thumb'), page);
       item.addEventListener('click', (e) => {
         if (e.target.closest('.page-delete-btn')) return;
         this._switchPage(i);
@@ -255,6 +322,43 @@ export class BoardController {
       });
       list.appendChild(item);
     });
+  }
+
+  /**
+   * Desenha a miniatura de uma pagina a partir do raster salvo.
+   *
+   * O cache fica num `WeakMap` de proposito: uma propriedade no objeto
+   * `page` entraria no `JSON.stringify` das pagoes e inflaria o
+   * localStorage com um segundo data URL.
+   *
+   * @param {HTMLElement} host
+   * @param {object} page
+   */
+  _renderPageThumb(host, page) {
+    if (!host) return;
+    const source = page.drawingData;
+    if (!source) {
+      host.innerHTML = '';
+      return;
+    }
+    const cached = this._thumbs.get(page);
+    if (cached && cached.for === source) {
+      host.style.backgroundImage = `url(${cached.url})`;
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const w = 120;
+      const h = Math.max(1, Math.round(w * (img.height / (img.width || 1))));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const url = canvas.toDataURL('image/jpeg', 0.6);
+      this._thumbs.set(page, { for: source, url });
+      host.style.backgroundImage = `url(${url})`;
+    };
+    img.src = source;
   }
 
   /* ---- Limpar pagina ---- */
@@ -359,10 +463,12 @@ export class BoardController {
     if (page) page.orientation = this.board.isLandscape ? 'landscape' : 'portrait';
     this.toolbar.setLandscapeActive(this.board.isLandscape);
     this._saveState();
+    // A troca de eixos muda o tamanho do backing store do canvas, entao
+    // ele so pode ser reservado (e o redesenhado) com a dimensao final.
     setTimeout(() => {
-      const rect = this.$.whiteboard.getBoundingClientRect();
-      this.boardView.canvas.width = rect.width;
-      this.boardView.canvas.height = rect.height;
+      const { resized } = this.boardView.resizeDrawingCanvas();
+      if (!resized) return;
+      this.boardView.clearCanvas();
       const curPage = this.board.currentPage;
       if (curPage && curPage.drawingData) this.boardView.drawBackground(curPage.drawingData);
     }, 450);
@@ -467,7 +573,7 @@ export class BoardController {
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (ev) => this.objectController.createImage(ev.target.result, false, 100, 100);
+      reader.onload = (ev) => this.objectController.insertImageFromSrc(ev.target.result, 100, 100);
       reader.readAsDataURL(file);
       e.target.value = '';
     });
@@ -486,7 +592,7 @@ export class BoardController {
           const reader = new FileReader();
           reader.onload = (ev) => {
             if (this._isDuplicateImage(ev.target.result, 100, 100)) return;
-            this.objectController.createImage(ev.target.result, false, 100, 100);
+            this.objectController.insertImageFromSrc(ev.target.result, 100, 100);
           };
           reader.readAsDataURL(file);
         } else if (file.name.endsWith('.json')) {
@@ -540,7 +646,26 @@ export class BoardController {
         isLandscape: this.board.isLandscape,
         currentPageIndex: this.board.currentPageIndex
       }));
-    } catch {}
+      this.#quotaWarned = false;
+    } catch (err) {
+      this._warnQuota(err);
+    }
+  }
+
+  /**
+   * Avisa uma unica vez que o localStorage estourou.
+   *
+   * Bitmaps de alta resolucao consumem cota rapido (o limite e ~5 MB), e
+   * o `setItem` lanca `QuotaExceededError` sem deixar o estado salvo. O
+   * aviso importa porque a falha e silenciosa: a lousa continua
+   * funcionando, mas recarregar a pagina perde o trabalho.
+   * @param {Error} [err]
+   */
+  _warnQuota(err) {
+    const isQuota = err && (err.name === 'QuotaExceededError' || err.code === 22 || err.code === 1014);
+    if (!isQuota || this.#quotaWarned) return;
+    this.#quotaWarned = true;
+    this.showToast('Armazenamento cheio: reduza as imagens ou exporte o projeto');
   }
 
   /* ---- Toast ---- */

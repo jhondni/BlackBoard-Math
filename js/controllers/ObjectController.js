@@ -8,8 +8,17 @@
    ============================================ */
 
 import { MathObject } from '../models/MathObject.js';
+import { ImageObject } from '../models/ImageObject.js';
 
 export class ObjectController {
+  /**
+   * Dimensao de referencia do canvas de preview do modal. Todas as
+   * medidas do grafico (fonte, espessura, deslocamento de rotulo) sao
+   * escritas para esta largura e multiplicadas por `w / width` quando o
+   * bitmap e produzido noutra resolucao.
+   */
+  static GRAPH_BASE = { width: 500, height: 350 };
+
   constructor(board, boardView, mathEditor, toolbox) {
     this.board = board;
     this.boardView = boardView;
@@ -143,13 +152,41 @@ export class ObjectController {
    * @param {number} [x]
    * @param {number} [y]
    */
-  createImage(src, isGraph = false, x = 100, y = 100, width, height) {
-    const obj = this.board.createImage(src, x, y, isGraph);
-    if (width) obj.width = width;
-    if (height) obj.height = height;
+  createImage(src, isGraph = false, x = 100, y = 100, width, height, opts = {}) {
+    const obj = this.board.createImage(src, x, y, isGraph, { ...opts, width, height });
     this.boardView.addObjectElement(obj);
     if (this.onCommit) this.onCommit();
     return obj;
+  }
+
+  /**
+   * Insere uma imagem a partir de um data URL/URL lendo a resolucao
+   * nativa antes de decidir o tamanho da caixa. Sem isso a imagem
+   * entraria espremida num tamanho fixo e o detalhe ja nasceria
+   * perdido antes mesmo do zoom.
+   *
+   * @param {string} src
+   * @param {number} [x]
+   * @param {number} [y]
+   * @returns {Promise<object|null>}
+   */
+  async insertImageFromSrc(src, x = 100, y = 100) {
+    if (!src) return null;
+    let naturalWidth = 0;
+    let naturalHeight = 0;
+    try {
+      const img = await ImageObject.loadNaturalSize(src);
+      naturalWidth = img.naturalWidth;
+      naturalHeight = img.naturalHeight;
+    } catch (_) {
+      // Sem dimensoes: cai no tamanho padrao do ImageObject.
+    }
+    const box = ImageObject.fitSize(naturalWidth, naturalHeight);
+    return this.createImage(src, false, x, y, box.width, box.height, {
+      naturalWidth,
+      naturalHeight,
+      renderedScale: Math.min(naturalWidth / box.width, naturalHeight / box.height)
+    });
   }
 
   /**
@@ -183,6 +220,12 @@ export class ObjectController {
     this.graphCanvas = $.graphPreview;
     if (this.graphCanvas) {
       this.graphCtx = this.graphCanvas.getContext('2d');
+      // A dimensao nativa do elemento e a referencia de pintura e a
+      // dimensao a que o preview volta depois de exibir um bitmap grande.
+      ObjectController.GRAPH_BASE = {
+        width: this.graphCanvas.width || 500,
+        height: this.graphCanvas.height || 350
+      };
     }
     // Atualiza o preview ao vivo para qualquer ajuste do grafico.
     const controls = [
@@ -205,22 +248,41 @@ export class ObjectController {
   }
 
   insertGraph() {
-    this.drawGraphPreview();
-    if (!this.graphCanvas) return null;
-
-    // Mantem a proporcao do preview ao inserir na lousa.
-    const srcW = this.graphCanvas.width;
-    const srcH = this.graphCanvas.height;
+    const spec = this._currentGraphSpec();
+    const aspect = this._graphAspect();
     const width = 400;
-    const height = Math.round(width * (srcH / srcW));
+    const height = Math.round(width / aspect);
 
-    const src = this.graphCanvas.toDataURL('image/png');
-    const obj = this.createImage(src, true, 100, 100, width, height);
-    // Guarda aformula e os limites para permitir re-renderizar em alta
-    // resolucao ao redimensionar, em vez de esticar o PNG de 500x350.
-    if (obj) obj.graphSpec = this._currentGraphSpec();
+    // O primeiro bitmap ja e pintado na densidade de tela alvo; o
+    // `graphSpec` guardado permite repintar em resolucao maior no zoom.
+    const scale = this._renderScale();
+    const src = this.drawGraphOffscreen(spec, {
+      width: Math.round(width * scale),
+      height: Math.round(height * scale)
+    });
+    if (!src) return null;
+
+    const obj = this.createImage(src, true, 100, 100, width, height, {
+      graphSpec: spec,
+      naturalWidth: Math.round(width * scale),
+      naturalHeight: Math.round(height * scale),
+      renderedScale: scale
+    });
+    this.drawGraphPreview(spec);
     this.toolbox.$.graphModal.classList.add('hidden');
     return obj;
+  }
+
+  /** Proporcao (largura/altura) do canvas de preview do modal. */
+  _graphAspect() {
+    const { width, height } = ObjectController.GRAPH_BASE;
+    return width / height;
+  }
+
+  /** Densidade de pixels (px do bitmap / px de tela) do preview. */
+  _renderScale() {
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    return Math.min(dpr, 2);
   }
 
   /** Le os parametros atuais do grafico do formulario. */
@@ -242,26 +304,69 @@ export class ObjectController {
   }
 
   /**
-   * Desenha o grafico num canvas.
+   * Desenha o grafico no canvas de preview do modal.
+   *
+   * O canvas do modal tem dimensao fixa: e repintado e depois
+   * restaurado ao tamanho original, para que pedir um bitmap grande
+   * (durante o zoom de um objeto ja inserido) nao estoure a caixa do
+   * preview.
+   *
    * @param {object} [spec] - Parametros; usa o formulario quando omitido.
-   * @param {{width:number,height:number}} [size] - Dimensao alvo do canvas.
    * @returns {string|null} data URL do resultado.
    */
-  drawGraphPreview(spec = null, size = null) {
-    const $ = this.toolbox.$;
+  drawGraphPreview(spec = null) {
     const canvas = this.graphCanvas;
     const gctx = this.graphCtx;
     if (!canvas || !gctx) return null;
 
-    if (size) {
-      canvas.width = Math.max(1, Math.round(size.width));
-      canvas.height = Math.max(1, Math.round(size.height));
+    const base = ObjectController.GRAPH_BASE;
+    const resized = canvas.width !== base.width || canvas.height !== base.height;
+    if (resized) {
+      canvas.width = base.width;
+      canvas.height = base.height;
     }
+    this._paintGraph(gctx, base.width, base.height, spec || this._currentGraphSpec());
+    return canvas.toDataURL('image/png');
+  }
 
-    const w = canvas.width;
-    const h = canvas.height;
+  /**
+   * Pinta o grafico num canvas solto (nao aparece na tela) e devolve
+   * o data URL. Usado pelo `ImageObject.rerender` para refazer o
+   * bitmap na densidade exigida pelo zoom.
+   *
+   * @param {object} spec - Parametros do grafico.
+   * @param {{width:number,height:number}} size - Dimensao do bitmap.
+   * @returns {string|null}
+   */
+  drawGraphOffscreen(spec, size) {
+    const w = Math.max(1, Math.round(size && size.width));
+    const h = Math.max(1, Math.round(size && size.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    this._paintGraph(ctx, w, h, spec || this._currentGraphSpec());
+    return canvas.toDataURL('image/png');
+  }
 
-    const source = spec || this._currentGraphSpec();
+  /**
+   * Desenha o grafico em `ctx` occupying `w` x `h` pixels.
+   *
+   * Espessuras, fonte e deslocamentos sao multiplicados por `factor`
+   * (w / largura de referencia). E o que faz o bitmap grande ser a
+   * MESMA figura, so que com pixels suficientes: se a fonte e a linha
+   * ficassem em pixels absolutos, o grafico de 4x pareceria com traco
+   * fino e rotulo pequeno, e nao como o original ampliado.
+   *
+   * @param {CanvasRenderingContext2D} gctx
+   * @param {number} w
+   * @param {number} h
+   * @param {object} source
+   */
+  _paintGraph(gctx, w, h, source) {
+    const factor = w / ObjectController.GRAPH_BASE.width;
+
     const { funcStr, color, lineW } = source;
     let xmin = source.xmin;
     let xmax = source.xmax;
@@ -285,7 +390,7 @@ export class ObjectController {
 
     // Eixos
     gctx.strokeStyle = '#999';
-    gctx.lineWidth = 1;
+    gctx.lineWidth = Math.max(0.5, factor);
     if (ymin <= 0 && ymax >= 0) {
       const y0 = toScreenY(0);
       gctx.beginPath(); gctx.moveTo(0, y0); gctx.lineTo(w, y0); gctx.stroke();
@@ -297,35 +402,42 @@ export class ObjectController {
 
     // Grade
     gctx.strokeStyle = '#eee';
-    gctx.lineWidth = 0.5;
+    gctx.lineWidth = Math.max(0.25, 0.5 * factor);
     gctx.fillStyle = '#666';
-    gctx.font = '10px sans-serif';
+    gctx.font = `${Math.max(6, Math.round(10 * factor))}px sans-serif`;
     const axisY = (ymin <= 0 && ymax >= 0) ? toScreenY(0) : h;
     const axisX = (xmin <= 0 && xmax >= 0) ? toScreenX(0) : 0;
+    // Os passos sao contados em unidades de dado, nao em pixels: assim a
+    // densidade da grade e a mesma em qualquer resolucao.
     const stepX = Math.ceil((xmax - xmin) / 20) || 1;
     for (let x = Math.ceil(xmin); x <= xmax; x += stepX) {
       const sx = toScreenX(x);
       gctx.beginPath(); gctx.moveTo(sx, 0); gctx.lineTo(sx, h); gctx.stroke();
-      if (x !== 0) gctx.fillText(x, sx + 2, Math.min(h - 2, axisY + 11));
+      if (x !== 0) gctx.fillText(x, sx + 2 * factor, Math.min(h - 2 * factor, axisY + 11 * factor));
     }
     const stepY = Math.ceil((ymax - ymin) / 15) || 1;
     for (let y = Math.ceil(ymin); y <= ymax; y += stepY) {
       const sy = toScreenY(y);
       gctx.beginPath(); gctx.moveTo(0, sy); gctx.lineTo(w, sy); gctx.stroke();
-      if (y !== 0) gctx.fillText(y, Math.min(w - 16, axisX + 4), sy - 2);
+      if (y !== 0) gctx.fillText(y, Math.min(w - 16 * factor, axisX + 4 * factor), sy - 2 * factor);
     }
 
-    // Plot da funcao
+    const labelError = (msg) => {
+      gctx.fillStyle = '#e53935';
+      gctx.font = `${Math.max(8, Math.round(14 * factor))}px sans-serif`;
+      gctx.fillText(msg, 20 * factor, 30 * factor);
+    };
+
+    // Plot da funcao: uma amostra por coluna de pixel, entao o tracado
+    // fica suave na maior resolucao possivel.
     const { fn, error } = this._computeFunction(funcStr);
     if (error) {
-      gctx.fillStyle = '#e53935';
-      gctx.font = '14px sans-serif';
-      gctx.fillText(error, 20, 30);
-      return null;
+      labelError(error);
+      return;
     }
     if (fn) {
       gctx.strokeStyle = color;
-      gctx.lineWidth = lineW;
+      gctx.lineWidth = lineW * factor;
       gctx.lineJoin = 'round';
       gctx.beginPath();
       let started = false;
@@ -341,14 +453,8 @@ export class ObjectController {
         plotted++;
       }
       gctx.stroke();
-      if (plotted === 0) {
-        gctx.fillStyle = '#e53935';
-        gctx.font = '14px sans-serif';
-        gctx.fillText('Sem valores no intervalo', 20, 30);
-      }
+      if (plotted === 0) labelError('Sem valores no intervalo');
     }
-
-    return canvas.toDataURL('image/png');
   }
 
   /**

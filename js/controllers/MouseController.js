@@ -35,13 +35,38 @@ export class MouseController {
     canvas.addEventListener('mouseleave', () => this.onUp());
   }
 
-  /** Converte coordenadas de clique para coordenadas da lousa (considerando zoom). */
+  /**
+   * Fator px do canvas por px da lousa, definido por
+   * `BoardView.resizeDrawingCanvas()`.
+   */
+  get _canvasScale() {
+    return this.boardView.drawingScale || 1;
+  }
+
+  /**
+   * Converte coordenadas de clique para coordenadas da lousa.
+   *
+   * Passa pelo tamanho real do elemento na tela em vez de dividir pelo
+   * zoom: quando o teto de memoria limita a densidade do canvas, os dois
+   * valores deixam de coincidir e usar `board.zoom` deslocaria o traço.
+   */
   _toBoard(e) {
-    const rect = this.boardView.canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX - rect.left) / this.board.zoom,
-      y: (e.clientY - rect.top) / this.board.zoom
-    };
+    const canvas = this.boardView.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const screenW = rect.width || 1;
+    const canvasPx = (e.clientX - rect.left) * (canvas.width / screenW);
+    const canvasPy = (e.clientY - rect.top) * (canvas.height / (rect.height || 1));
+    const scale = this._canvasScale;
+    return { x: canvasPx / scale, y: canvasPy / scale };
+  }
+
+  /**
+   * Aplica a densidade do canvas como transform, para que o traço seja
+   * descrito em px de lousa e saia com espessura proporcional.
+   */
+  _applyCanvasTransform(ctx) {
+    const scale = this._canvasScale;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
   }
 
   onDown(e) {
@@ -105,6 +130,7 @@ export class MouseController {
 
   _beginPath(color, size) {
     const ctx = this.boardView.canvas.getContext('2d');
+    this._applyCanvasTransform(ctx);
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = size;
@@ -130,6 +156,7 @@ export class MouseController {
     const ctx = this.boardView.canvas.getContext('2d');
 
     if (tool === 'draw' || tool === 'eraser') {
+      this._applyCanvasTransform(ctx);
       ctx.lineTo(x, y);
       ctx.stroke();
     } else if (tool === 'blur') {
@@ -172,39 +199,55 @@ export class MouseController {
 
   /**
    * Aplica efeito blur (borrao) num ponto do canvas.
-   * Executa um desfoque gaussiano simples (3x3) region.
-   * @param {number} x
-   * @param {number} y
+   * Executa um desfoque gaussiano simples (5x5) na regiao.
+   *
+   * A regao e medida em px da lousa e convertida para px do canvas, de
+   * modo que o borrao cubra a mesma area da pagina em qualquer zoom. O
+   * kernel continua 5x5 em px do canvas: apenas a regiao cresce.
+   *
+   * @param {number} x - px da lousa
+   * @param {number} y - px da lousa
    */
   _applyBlurAt(x, y) {
     const size = this.board.penSize * 5;
     const ctx = this.boardView.canvas.getContext('2d');
-    const imageData = ctx.getImageData(x - size / 2, y - size / 2, size, size);
+    const canvas = this.boardView.canvas;
+    const scale = this._canvasScale;
+
+    const px = Math.round(x * scale);
+    const py = Math.round(y * scale);
+    const side = Math.max(3, Math.round(size * scale));
+    const ox = Math.max(0, px - (side >> 1));
+    const oy = Math.max(0, py - (side >> 1));
+    const w = Math.min(side, canvas.width - ox);
+    const h = Math.min(side, canvas.height - oy);
+    if (w < 3 || h < 3) return;
+
+    const imageData = ctx.getImageData(ox, oy, w, h);
     const data = imageData.data;
-    const w = imageData.width;
-    const h = imageData.height;
     const copy = new Uint8ClampedArray(data);
 
-    for (let py = 0; py < h; py++) {
-      for (let px = 0; px < w; px++) {
+    for (let row = 0; row < h; row++) {
+      for (let col = 0; col < w; col++) {
         let r = 0, g = 0, b = 0, a = 0, count = 0;
         for (let dy = -2; dy <= 2; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
-            const nx = px + dx;
-            const ny = py + dy;
+            const nx = col + dx;
+            const ny = row + dy;
             if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
               const i = (ny * w + nx) * 4;
               r += copy[i]; g += copy[i + 1]; b += copy[i + 2]; a += copy[i + 3]; count++;
             }
           }
         }
-        const i = (py * w + px) * 4;
+        const i = (row * w + col) * 4;
         data[i] = r / count;
         data[i + 1] = g / count;
         data[i + 2] = b / count;
         data[i + 3] = a / count;
       }
     }
-    ctx.putImageData(imageData, x - size / 2, y - size / 2);
+    // putImageData ignora o transform, entao usa px do canvas direto.
+    ctx.putImageData(imageData, ox, oy);
   }
 }

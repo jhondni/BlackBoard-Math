@@ -23,6 +23,7 @@ export class SelectionView {
     this.onDeleteObject = null; // callback (obj) => void
     this.onBlurObject = null; // callback (obj) => void
     this.onCommitChange = null; // callback () => void (salvar historico)
+    this.onResized = null; // callback (obj) => void -> re-render do bitmap
     this.objectController = null; // permite re-render de graficos/imagens
 
     // Getter da ferramenta ativa (injetado pelo app.js).
@@ -192,8 +193,11 @@ export class SelectionView {
       this.resizing = false;
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      if (obj && obj.rerender && this.objectController) {
-        obj.rerender(this.objectController);
+      // A caixa mudou de tamanho, entao a densidade de pixels exigida
+      // mudou junto: o bitmap precisa ser refeito.
+      if (this.onResized) this.onResized(obj);
+      else if (obj && obj.rerender && this.objectController) {
+        obj.rerender(this.objectController, this.board.zoom);
       }
       if (this.onCommitChange) this.onCommitChange();
     };
