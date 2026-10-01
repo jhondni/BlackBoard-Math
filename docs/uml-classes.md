@@ -92,6 +92,41 @@ classDiagram
     MathRenderer ..> MathJax
 ```
 
+## Diagrama em tabela
+
+Visão do diagrama em formato de tabela para melhor legibilidade. As colunas
+mostram, por classe, os **atributos**, **métodos** e **relacionamentos**.
+
+### Classes do modelo
+
+| Classe | Estereótipo | Atributos | Métodos | Relacionamentos |
+| --- | --- | --- | --- | --- |
+| `BoardObject` | `<<abstract>>` | `- id: String` · `- x/y: Number` · `- width/height: Number` · `- rotation: Number` · `- selected: Boolean` | `+ move()` · `+ resize()` · `+ rotate()` · `+ select()` · `+ deselect()` · `+ applyBlur()` · `+ sync()` · `+ render()` · `+ toJSON()` | **superclasse** (classe base) |
+| `MathObject` | — | `- latex: String` · `- fontSize: Number` | `+ setLatex()` · `+ reRender()` | **herda** de `BoardObject` |
+| `TextObject` | — | `- text: String` · `- fontSize: Number` | `+ setText()` · `+ toDOMContent()` | **herda** de `BoardObject` |
+| `ImageObject` | — | `- src: String` · `- originalSrc: String` · `- isGraph: Boolean` · `- graphSpec: Object` · `- naturalWidth/Height: Number` · `- renderedScale: Number` | `+ resize()` · `+ setSrc()` · `+ toDOMContent()` · `+ requiredScale()` · `+ needsRerender()` · `+ rerender()` | **herda** de `BoardObject` |
+| `ShapeObject` | — | `- shapeType: String` · `- fill: String` · `- stroke: String` | `+ toDOMContent()` | **herda** de `BoardObject` |
+| `Board` | — | `- objects: BoardObject[]` · `- selectedObject` · `- zoom: Number` · `- offsetX/offsetY: Number` · `- pages: Object[]` · `- library: Object[]` · `- history: Object[]` | `+ addObject()` · `+ removeObject()` · `+ getObject()` · `+ selectObject()` · `+ deselectObject()` · `+ clear()` · `+ createMath()/createText()/createImage()/createShape()` · `+ pushHistory()` | **compõe** `1..*` `BoardObject` |
+
+### Renderizadores
+
+| Classe | Estereótipo | Atributos | Métodos | Relacionamentos |
+| --- | --- | --- | --- | --- |
+| `MathRenderer` | — | — | `+ render()` · `+ toSVG()` | usado **por** `MathObject` (dependência); delega a `KaTeX`/`MathJax` |
+| `TextRenderer` | — | — | `+ applyText()` · `+ measureText()` · `+ wrapText()` | usado **por** `TextObject` (dependência) |
+| `SVGRenderer` | — | *(métodos estáticos)* | `+ svgContainer()` · `+ createShape()` · `+ renderShape()` · `+ serialize()` | usado **por** `ShapeObject` (dependência) |
+
+### Resumo dos relacionamentos
+
+| Relação | Origem | Destino | Cardinalidade |
+| --- | --- | --- | --- |
+| Herança | `BoardObject` —▶ `MathObject`, `TextObject`, `ImageObject`, `ShapeObject` | 1 → 4 subclasses |
+| Composição | `Board` o— `BoardObject` | `1..*` objetos |
+| Dependência | `MathObject` ⇢ `MathRenderer` | 1 → 1 |
+| Dependência | `TextObject` ⇢ `TextRenderer` | 1 → 1 |
+| Dependência | `ShapeObject` ⇢ `SVGRenderer` | 1 → 1 |
+| Delegação | `MathRenderer` ⇢ `KaTeX` / `MathJax` | 1 → 2 (fallback) |
+
 ## Diagrama ASCII
 
 ```
