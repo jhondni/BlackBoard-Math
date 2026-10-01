@@ -475,16 +475,42 @@ export class BoardController {
     workspace.addEventListener('dragover', (e) => e.preventDefault());
     workspace.addEventListener('drop', (e) => {
       e.preventDefault();
-      for (const file of e.dataTransfer.files) {
+      const dt = e.dataTransfer;
+      if (this._isInternalDrag(dt)) return;
+      for (const file of dt.files) {
         if (file.type.startsWith('image/')) {
           const reader = new FileReader();
-          reader.onload = (ev) => this.objectController.createImage(ev.target.result, false, 100, 100);
+          reader.onload = (ev) => {
+            if (this._isDuplicateImage(ev.target.result, 100, 100)) return;
+            this.objectController.createImage(ev.target.result, false, 100, 100);
+          };
           reader.readAsDataURL(file);
         } else if (file.name.endsWith('.json')) {
           this.importJSON(file);
         }
       }
     });
+  }
+
+  /**
+   * Arrastar um elemento da propria lousa dispara `drop` no workspace.
+   * Nesses casos o dataTransfer traz payloads de string (text/uri-list,
+   * text/html, chromium/x-drag-id) e nao um arquivo real do disco.
+   */
+  _isInternalDrag(dt) {
+    if (!dt) return true;
+    if (!dt.files || dt.files.length === 0) return true;
+    return Array.from(dt.items || []).some((item) => item.kind === 'string');
+  }
+
+  /**
+   * Descarta o drop se o mesmo src ja foi inserido na mesma posicao,
+   * evitando duplicatas akibat de multiplos disparos de `drop`.
+   */
+  _isDuplicateImage(src, x, y) {
+    return this.board.objects.some(
+      (obj) => obj.src === src && obj.x === x && obj.y === y
+    );
   }
 
   /* ---- Persistencia ---- */
