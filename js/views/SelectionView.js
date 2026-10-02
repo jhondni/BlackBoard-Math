@@ -18,7 +18,10 @@ export class SelectionView {
     this.resizeDir = '';
     this.resizeStart = {};
 
-    this.onEditEquation = null; // callback (obj) => void
+    // Edicao de qualquer objeto: a view nao sabe se e equacao, texto ou
+    // grafico, apenas que o usuario pediu para editar. O BoardController
+    // decide qual modal abrir.
+    this.onEditObject = null; // callback (obj) => void
     this.onEditText = null; // callback (obj) => void -> editar texto (ferramenta texto)
     this.onDeleteObject = null; // callback (obj) => void
     this.onBlurObject = null; // callback (obj) => void
@@ -67,7 +70,7 @@ export class SelectionView {
     if (editBtn) {
       editBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (this.onEditEquation) this.onEditEquation(obj);
+        if (this.onEditObject) this.onEditObject(obj);
       });
     }
   }

@@ -62,6 +62,8 @@ import { MouseController } from './controllers/MouseController.js';
     graphWidth: byId('graph-width'),
     graphPreview: byId('graph-preview'),
     insertGraphBtn: byId('insert-graph-btn'),
+    graphModalTitle: byId('graph-modal-title'),
+    graphModalHint: byId('graph-modal-hint'),
 
     helpModal: byId('help-modal'),
     exportModal: byId('export-modal'),

@@ -97,7 +97,15 @@ export class BoardController {
       this.board.removeObject(obj);
       this.commitHistory();
     };
-    this.selectionView.onEditEquation = (obj) => this.objectController.openEquationModal(obj);
+    // O botao de editar e o mesmo para todo objeto, entao quem sabe qual
+    // modal cabe e o controller: equacao e grafico tem modal proprio, e
+    // texto se edita na propria lousa.
+    this.selectionView.onEditObject = (obj) => {
+      if (!obj) return;
+      if (obj.type === 'graph') return this.objectController.openGraphModal(obj);
+      if (obj.type === 'equation') return this.objectController.openEquationModal(obj);
+      if (obj.type === 'text') return this.objectController.focusText(obj);
+    };
     this.selectionView.onEditText = (obj) => this.objectController.focusText(obj);
     this.selectionView.onBlurObject = (obj, force) => {
       obj.applyBlur(force !== undefined ? force : !obj.blurred);
@@ -120,19 +128,27 @@ export class BoardController {
     });
     this.$.librarySearchInput.addEventListener('input', () => this.renderLibrary());
 
-    // Insert grafico
+    // Insert/edita grafico
     this.$.insertGraphBtn.addEventListener('click', () => {
-      const inserted = this.objectController.insertGraph();
-      if (inserted) this.showToast('Grafico inserido');
+      const wasEditing = Boolean(this.objectController._editingGraph);
+      const result = this.objectController.insertGraph();
+      if (result) this.showToast(wasEditing ? 'Grafico atualizado' : 'Grafico inserido');
     });
 
-    // Modais (fechar)
+    // Modais (fechar). Fechar o modal de grafico cancela a edicao: o alvo
+    // e limpo e os rotulos voltam ao modo de criacao, senao o proximo
+    // `G` abriria em modo de edicao sobre o grafico anterior.
     document.querySelectorAll('.close-modal-btn').forEach(btn => {
-      btn.addEventListener('click', () => btn.closest('.modal').classList.add('hidden'));
+      btn.addEventListener('click', () => {
+        const modal = btn.closest('.modal');
+        if (modal && modal === this.$.graphModal) this.objectController.cancelGraphEdit();
+        modal.classList.add('hidden');
+      });
     });
     document.querySelectorAll('.modal').forEach(modal => {
       modal.addEventListener('click', (e) => {
         if (e.target === modal || e.target.classList.contains('modal-backdrop')) {
+          if (modal === this.$.graphModal) this.objectController.cancelGraphEdit();
           modal.classList.add('hidden');
         }
       });

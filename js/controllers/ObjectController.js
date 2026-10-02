@@ -30,6 +30,9 @@ export class ObjectController {
     this.onPersist = null; // () => void -> salvar estado
     this.onLibraryChange = null; // () => void -> re-renderizar biblioteca
 
+    // Grafico em edicao, enquanto o modal de grafico estiver aberto.
+    this._editingGraph = null;
+
     this.graphCtx = null;
     this.initGraph();
   }
@@ -227,6 +230,10 @@ export class ObjectController {
         height: this.graphCanvas.height || 350
       };
     }
+    // Defaults do formulario, lidos uma vez. Editar um grafico escreve
+    // nos mesmos campos que o `G` usa, entao sem isto o proximo `G`
+    // abriria com o que ficou digitado na edicao anterior.
+    this._graphDefaults = this._currentGraphSpec();
     // Atualiza o preview ao vivo para qualquer ajuste do grafico.
     const controls = [
       $.graphFunction, $.graphXmin, $.graphXmax,
@@ -237,18 +244,125 @@ export class ObjectController {
     });
   }
 
-  openGraphModal() {
-    this.drawGraphPreview();
-    this.toolbox.$.graphModal.classList.remove('hidden');
-    const fn = this.toolbox.$.graphFunction;
+  /**
+   * Abre o modal de grafico.
+   *
+   * Sem argumento, e a criacao de um grafico novo: o formulario mostra os
+   * valores padrao. Com um grafico existente, e edicao: o formulario e
+   * preenchido com os parametros ja pintados e o rodape passa a falar em
+   * salvar. O alvo fica guardado em `_editingGraph` para que `insertGraph`
+   * atualize o objeto em vez de criar outro.
+   *
+   * @param {ImageObject} [existing] - Grafico a editar.
+   */
+  openGraphModal(existing = null) {
+    const $ = this.toolbox.$;
+    const isEditing = Boolean(existing && existing.type === 'graph');
+    this._editingGraph = isEditing ? existing : null;
+
+    if (isEditing) this._fillGraphForm(existing.graphSpec);
+    else this._fillGraphForm(null); // 'G' sempre abre com os defaults
+    this._setGraphModalMode(isEditing, !isEditing);
+
+    this.drawGraphPreview(isEditing ? this._currentGraphSpec() : null);
+    $.graphModal.classList.remove('hidden');
+
+    const fn = $.graphFunction;
     if (fn) {
-      fn.focus();
-      fn.select();
+      // Editando, o cursor no comeco da funcao: normalmente e ela que muda.
+      // Criando, seleciona o texto para trocar direto pelo teclado.
+      if (isEditing) {
+        fn.focus();
+        fn.setSelectionRange(0, 0);
+      } else {
+        fn.focus();
+        fn.select();
+      }
     }
   }
 
+  /**
+   * Escreve os parametros de um grafico no formulario do modal.
+   *
+   * Graficos inseridos antes do `graphSpec` existir nao tem o que
+   * reconstruir: o modal abre com os valores padrao e um aviso, em vez de
+   * fingir que conhece o desenho.
+   *
+   * @param {object|null} spec
+   */
+  _fillGraphForm(spec) {
+    const $ = this.toolbox.$;
+    // Sem spec, os defaults originais do formulario (e nao o que estiver
+    // nos campos agora): abrir um grafico legado nao pode herdar o que
+    // o usuario digitou numa edicao anterior. O aviso no modal diz que
+    // os campos chegaram vazios.
+    const source = spec || this._graphDefaults || this._currentGraphSpec();
+
+    if ($.graphFunction) $.graphFunction.value = source.funcStr;
+    if ($.graphXmin) $.graphXmin.value = source.xmin;
+    if ($.graphXmax) $.graphXmax.value = source.xmax;
+    if ($.graphYmin) $.graphYmin.value = source.ymin;
+    if ($.graphYmax) $.graphYmax.value = source.ymax;
+    if ($.graphColor) $.graphColor.value = source.color;
+    if ($.graphWidth) $.graphWidth.value = source.lineW;
+  }
+
+  
+
+  /**
+   * Ajusta os textos do modal ao modo (criar ou editar).
+   * @param {boolean} isEditing
+   * @param {boolean} [hasSpec]
+   */
+  _setGraphModalMode(isEditing, hasSpec) {
+    const $ = this.toolbox.$;
+    if ($.graphModalTitle) {
+      $.graphModalTitle.textContent = isEditing ? 'Editar Grafico' : 'Criar Grafico';
+    }
+    if ($.insertGraphBtn) {
+      $.insertGraphBtn.textContent = isEditing ? 'Salvar' : 'Inserir Grafico';
+    }
+    if ($.graphModalHint) {
+      // O aviso so aparece quando falta o spec, ou quando ha spec e vale
+      // lembrar que a edicao repinta. Sem spec, o texto e obrigatorio:
+      // o formulario abre no padrao e o usuario precisa saber disso.
+      if (isEditing) {
+        $.graphModalHint.textContent = hasSpec
+          ? 'Altere os parametros e salve para repintar o grafico.'
+          : 'Este grafico foi criado antes de os parametros serem salvos. Ajuste os campos e salve para repintar a partir deles.';
+        $.graphModalHint.hidden = false;
+      } else {
+        $.graphModalHint.textContent = '';
+        $.graphModalHint.hidden = true;
+      }
+    }
+  }
+
+  /**
+   * Cancela a edicao de um grafico: limpa o alvo e devolve os textos do
+   * modal ao modo de criacao. O grafico em si nao e tocado.
+   */
+  cancelGraphEdit() {
+    if (!this._editingGraph) return;
+    this._editingGraph = null;
+    this._setGraphModalMode(false, false);
+  }
+
+  /**
+   * Insere um grafico novo ou salva as alteracoes de um ja existente.
+   *
+   * Na edicao o objeto e atualizado no lugar (mesma posicao e tamanho):
+   * recria-lo perderia a disposicao e ainda ensacaria o historico com um
+   * par remover/criar em vez de uma edicao.
+   *
+   * @returns {ImageObject|null}
+   */
   insertGraph() {
     const spec = this._currentGraphSpec();
+    const existing = this._editingGraph;
+
+    if (existing) return this._saveGraphInto(existing, spec);
+
     const aspect = this._graphAspect();
     const width = 400;
     const height = Math.round(width / aspect);
@@ -270,6 +384,44 @@ export class ObjectController {
     });
     this.drawGraphPreview(spec);
     this.toolbox.$.graphModal.classList.add('hidden');
+    return obj;
+  }
+
+  /**
+   * Repinta um grafico existente com os parametros do formulario.
+   *
+   * O bitmap e gerado na densidade que a caixa atual exige, e nao na do
+   * primeiro bitmap: assim o grafico editado ja nasce com o mesmo
+   * detalhe que o zoom atual mostra, sem depender de um rerender depois.
+   *
+   * @param {ImageObject} obj
+   * @param {object} spec
+   * @returns {ImageObject|null}
+   */
+  _saveGraphInto(obj, spec) {
+    const boxW = Math.max(1, Math.round(obj.width));
+    const boxH = Math.max(1, Math.round(obj.height));
+    const scale = this._renderScale();
+    const targetW = Math.max(1, Math.round(boxW * scale));
+    const targetH = Math.max(1, Math.round(boxH * scale));
+
+    const src = this.drawGraphOffscreen(spec, { width: targetW, height: targetH });
+    if (!src) return null;
+
+    obj.graphSpec = spec;
+    obj.naturalWidth = targetW;
+    obj.naturalHeight = targetH;
+    obj.renderedScale = targetW / boxW;
+    obj.setSrc(src);
+    if (obj.dom) obj.render();
+
+    this.drawGraphPreview(spec);
+    this._setGraphModalMode(false, false);
+    this._editingGraph = null;
+    this.toolbox.$.graphModal.classList.add('hidden');
+
+    if (this.onCommit) this.onCommit();
+    if (this.onPersist) this.onPersist();
     return obj;
   }
 

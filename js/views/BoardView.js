@@ -111,9 +111,18 @@ export class BoardView {
    * @param {object} obj
    */
   buildControls(el, obj) {
+    // Quais acoes fazem sentido dependem do tipo: uma imagem comum nao
+    // tem edicao, e um grafico edita pelo modal de grafico, nao pelo de
+    // equacao. O botao de editar so e emitido quando ha o que editar;
+    // quem abre o modal correspondente e o BoardController.
+    // `type` vem do construtor de cada modelo: 'equation', 'text',
+    // 'graph' ou 'image'.
+    const editable = obj.type === 'equation' || obj.type === 'text' || obj.type === 'graph';
+    const editLabel = obj.type === 'graph' ? 'Editar Grafico' : 'Editar';
+
     el.innerHTML += `
       <div class="element-actions">
-        <button class="edit-eq-btn" title="Editar">&#9998;</button>
+        ${editable ? `<button class="edit-eq-btn" title="${editLabel}">&#9998;</button>` : ''}
         <button class="blur-btn" title="Borrar">&#128065;</button>
         <button class="delete-btn" title="Remover">&times;</button>
       </div>
