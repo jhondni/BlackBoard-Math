@@ -4,7 +4,12 @@
 
 ### Desenho e edição
 - **Desenho livre** — traço no canvas com cor e espessura ajustáveis (ferramenta `D`).
-- **Borracha** — apaga trechos do desenho (`X`).
+- **Ancoragem no centro da cruz** — o `mousedown` já pinta um disco com o
+  raio de metade da espessura, então o traço nasce exatamente sob a cruz e
+  não no primeiro pixel do `mousemove`. Como o navegador coalesce eventos de
+  mouse, esse primeiro evento pode chegar depois de um salto do ponteiro.
+- **Borracha** — apaga trechos do desenho (`X`); um clique sem arrastar apaga
+  um ponto, como a caneta.
 - **Blur nas equações / desenho** — ferramenta borrar (`B`) desfoca por região do canvas; elementos também têm toggle de blur.
 - **Texto livre** — clicar na lousa com a ferramenta texto (`T`) cria um campo editável.
 

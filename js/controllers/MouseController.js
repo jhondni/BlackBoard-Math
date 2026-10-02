@@ -131,12 +131,42 @@ export class MouseController {
   _beginPath(color, size) {
     const ctx = this.boardView.canvas.getContext('2d');
     this._applyCanvasTransform(ctx);
+    // Antes de abrir o caminho do traço: `_paintDot` fecha o caminho dele.
+    this._paintDot(color, size);
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = size;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.moveTo(this.lastX, this.lastY);
+  }
+
+  /**
+   * Marca o ponto de ancoragem do traço, como um disco preenchido.
+   *
+   * `moveTo` sozinho não pinta nada: o primeiro pixel só apareceria no
+   * primeiro `mousemove`, e um clique sem arrastar não deixaria rastro
+   * nenhum. Como o navegador coalesce `mousemove`, esse primeiro evento
+   * pode chegar depois de um salto do ponteiro, e a linha visível
+   * começaria longe da cruz, ainda que a âncora estivesse certa.
+   *
+   * O disco tem o raio de metade da espessura, que é o que a ponta
+   * arredondada do traço desenharia, então o traço seguinte nasce
+   * exatamente sobre ele. Um segmento de comprimento zero não serviria:
+   * o navegador não desenha nada quando os dois pontos coincidem, mesmo
+   * com `lineCap: round`.
+   *
+   * @param {string} color
+   * @param {number} size - espessura em px de lousa
+   */
+  _paintDot(color, size) {
+    const ctx = this.boardView.canvas.getContext('2d');
+    this._applyCanvasTransform(ctx);
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    ctx.arc(this.lastX, this.lastY, Math.max(0.5, size / 2), 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
   }
 
   onMove(e) {
