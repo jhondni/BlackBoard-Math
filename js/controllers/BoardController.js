@@ -369,7 +369,16 @@ export class BoardController {
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const ctx = canvas.getContext('2d');
+      // JPEG nao tem canal alfa: no Chrome, todo pixel transparente do
+      // `drawingData` (que e um PNG com alfa) seria codificado como
+      // preto. Como a miniatura e aplicada por cima do `background:
+      // white` do CSS, o branco do papel nunca apareceria. O preenchimento
+      // abaixo e a propria cor da pagina em ambos os temas
+      // (`--bg-canvas` e `#ffffff`), a mesma que o `exportPDF` ja usa.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
       const url = canvas.toDataURL('image/jpeg', 0.6);
       this._thumbs.set(page, { for: source, url });
       host.style.backgroundImage = `url(${url})`;
