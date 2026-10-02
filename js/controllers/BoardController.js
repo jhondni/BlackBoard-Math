@@ -522,6 +522,9 @@ export class BoardController {
 
   exportPDF() {
     this._saveCurrentPage();
+    // O anel do raio vive dentro do whiteboard: se estivesse visivel no
+    // momento da captura, sairia impresso no PDF.
+    this.boardView.hideDrawGuide();
     this.showToast('Gerando PDF...');
     window.html2canvas(this.$.whiteboard, { scale: 2, backgroundColor: '#ffffff' }).then((c) => {
       const { jsPDF } = window.jspdf;
@@ -539,6 +542,7 @@ export class BoardController {
 
   exportPNG() {
     this._saveCurrentPage();
+    this.boardView.hideDrawGuide();  // ver exportPDF
     this.showToast('Gerando PNG...');
     window.html2canvas(this.$.whiteboard, { scale: 2, backgroundColor: '#ffffff' }).then((c) => {
       const link = document.createElement('a');

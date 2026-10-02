@@ -28,6 +28,7 @@ import { MouseController } from './controllers/MouseController.js';
     whiteboard: byId('whiteboard'),
     canvas: byId('drawing-canvas'),
     elementsLayer: byId('elements-layer'),
+    drawGuide: byId('draw-guide'),
     zoomLevel: byId('zoom-level'),
 
     /* Toolbar / controls */
@@ -119,6 +120,10 @@ import { MouseController } from './controllers/MouseController.js';
   toolbar.init();
   toolController.init();
   boardController.init();
+
+  // Trocar de ferramenta tira o anel do raio: so caneta e borracha tem
+  // guia, e ele nao pode ficar orfao na tela.
+  toolController.onToolChange = () => mouseController.hideDrawGuide();
 
   // Disponibiliza o controller no escopo global para debug.
   window.__lousa = { board, boardController };

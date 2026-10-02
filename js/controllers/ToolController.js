@@ -21,6 +21,21 @@ export class ToolController {
     this.onZoomChange = null;   // () => void -> bitmaps podem precisar de mais pixels
     this.onDeleteSelected = null;
     this.onEscape = null;
+    this.onToolChange = null;   // (tool) => void -> guia do raio some ao trocar
+  }
+
+  /**
+   * Unico ponto por onde a ferramenta ativa muda.
+   *
+   * `routeTool` e o atalho de teclado chamavam `toolbar.setTool`
+   * diretamente, o que deixaria o aviso de troca dependente de lembrar
+   * os dois lugares.
+   *
+   * @param {string} tool
+   */
+  _setTool(tool) {
+    this.toolbar.setTool(tool);
+    if (this.onToolChange) this.onToolChange(tool);
   }
 
   init() {
@@ -41,11 +56,11 @@ export class ToolController {
     if (tool === 'graph') return this.onRequestGraph && this.onRequestGraph();
     if (tool === 'image') return this.onRequestImage && this.onRequestImage();
     if (tool === 'blur') {
-      this.toolbar.setTool(tool);
+      this._setTool(tool);
       if (this.onBlur) this.onBlur();
       return;
     }
-    this.toolbar.setTool(tool);
+    this._setTool(tool);
   }
 
   /* ---- Zoom ---- */
@@ -75,7 +90,7 @@ export class ToolController {
 
       const keyMap = { 'v': 'select', 'd': 'draw', 't': 'text', 'x': 'eraser', 'b': 'blur' };
       if (keyMap[key]) {
-        this.toolbar.setTool(keyMap[key]);
+        this._setTool(keyMap[key]);
         return;
       }
       if (key === 'e') { e.preventDefault(); this.onRequestEquation && this.onRequestEquation(); return; }

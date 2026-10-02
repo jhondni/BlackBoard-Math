@@ -8,6 +8,12 @@
   raio de metade da espessura, então o traço nasce exatamente sob a cruz e
   não no primeiro pixel do `mousemove`. Como o navegador coalesce eventos de
   mouse, esse primeiro evento pode chegar depois de um salto do ponteiro.
+- **Guia do raio da caneta e da borracha** — um anel translúcido sob o cursor
+  marca a área exata que o traço cobre (`penSize`) ou que a borracha apaga
+  (`penSize × 4`), acompanhando o zoom para o contorno continuar fino. A
+  borracha pinta branco puro sobre uma página que também é branca, então sem
+  o anel não dava para ver por onde ela passou. O anel é **efêmero**: não vai
+  para o `drawingData`, nem para o histórico, nem para o export.
 - **Borracha** — apaga trechos do desenho (`X`); um clique sem arrastar apaga
   um ponto, como a caneta.
 - **Blur nas equações / desenho** — ferramenta borrar (`B`) desfoca por região do canvas; elementos também têm toggle de blur.

@@ -701,6 +701,21 @@ body.dark-mode #whiteboard::before {
   pointer-events: none;
 }
 
+/* Anel que mostra o raio efetivo da caneta/borracha sob o cursor.
+   Fica dentro do whiteboard, entao acompanha o `scale()` do zoom sem
+   nenhum calculo de posicao. O anel e um `box-shadow` interno e nao uma
+   borda: o navegador arredonda `border-width` fracionario para 1px, o
+   que engrossaria o contorno junto com o zoom, enquanto o spread do
+   `box-shadow` respeita a fracao. */
+.draw-guide {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(124, 124, 142, 0.9);
+}
+.draw-guide[hidden] { display: none; }
+
 /* ============================================
    BOARD ELEMENTS
    ============================================ */

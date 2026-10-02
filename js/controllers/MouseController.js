@@ -32,7 +32,63 @@ export class MouseController {
     canvas.addEventListener('mousedown', (e) => this.onDown(e));
     canvas.addEventListener('mousemove', (e) => this.onMove(e));
     canvas.addEventListener('mouseup', () => this.onUp());
-    canvas.addEventListener('mouseleave', () => this.onUp());
+    canvas.addEventListener('mouseleave', () => {
+      this.onUp();
+      this.hideDrawGuide();
+    });
+  }
+
+  /**
+   * Raio efetivo da caneta ou da borracha, em px de lousa.
+   *
+   * E metade da espessura com que o traço e pintado, entao o anel
+   * coincide com a area que o traço realmente cobre. A borracha paints
+   * com `penSize * 4`, por isso o raio dela e `penSize * 2`.
+   *
+   * @param {string} tool
+   * @returns {number} 0 quando a ferramenta nao tem guia.
+   */
+  _guideRadius(tool) {
+    const size = this.board.penSize;
+    if (tool === 'eraser') return Math.max(0.5, (size * 4) / 2);
+    if (tool === 'draw') return Math.max(0.5, size / 2);
+    return 0;
+  }
+
+  /**
+   * Cor do contorno: a da caneta quando ela desenha (a borracha pinta
+   * branco, invisivel sobre a pagina clara), e um neutro no resto.
+   * @param {string} tool
+   * @returns {string}
+   */
+  _guideColor(tool) {
+    return tool === 'draw' ? this.board.penColor : 'rgba(124, 124, 142, 0.9)';
+  }
+
+  /**
+   * Reposiciona o anel do raio sob o cursor.
+   *
+   * A borracha pinta branco puro sobre uma pagina que tambem e branca:
+   * sem o anel nao ha como ver por onde ela passou. O guia e efemero,
+   * entao nada disso vai para o `drawingData` nem para o historico.
+   *
+   * @param {number} x - px de lousa
+   * @param {number} y - px de lousa
+   */
+  _updateGuide(x, y) {
+    const tool = this.toolbar.currentTool;
+    const radius = this._guideRadius(tool);
+    if (radius <= 0) return this.hideDrawGuide();
+    this.boardView.showDrawGuide({
+      x, y, radius,
+      zoom: this.board.zoom,
+      color: this._guideColor(tool)
+    });
+  }
+
+  /** Tira o anel do raio da tela. */
+  hideDrawGuide() {
+    this.boardView.hideDrawGuide();
   }
 
   /**
@@ -170,8 +226,11 @@ export class MouseController {
   }
 
   onMove(e) {
-    if (!this.isDrawing) return;
+    // Antes do guarda de `isDrawing`: o guia tambem aparece com o mouse
+    // apenas sobrevoando o canvas, sem traco em andamento.
     const { x, y } = this._toBoard(e);
+    this._updateGuide(x, y);
+    if (!this.isDrawing) return;
 
     if (this.textBoxDrag) {
       this.textBoxDrag.x = x;

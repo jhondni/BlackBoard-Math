@@ -244,6 +244,34 @@ export class BoardView {
   }
 
   /**
+   * Mostra o anel do raio efetivo da ferramenta em `x, y`.
+   *
+   * O anel vive dentro do whiteboard, que ja sofre `transform: scale()`,
+   * entao e posicionado em px de lousa e acompanha o zoom sem conversao
+   * de coordenadas. O contorno e um `box-shadow` interno de espessura
+   * `1/zoom` px, para continuar fino na tela em qualquer zoom.
+   *
+   * @param {{x:number, y:number, radius:number, zoom:number, color?:string}} guide
+   */
+  showDrawGuide(guide) {
+    const el = this.$.drawGuide;
+    if (!el || !(guide.radius > 0)) return this.hideDrawGuide();
+    const zoom = guide.zoom > 0 ? guide.zoom : 1;
+    el.style.left = `${guide.x - guide.radius}px`;
+    el.style.top = `${guide.y - guide.radius}px`;
+    el.style.width = `${guide.radius * 2}px`;
+    el.style.height = `${guide.radius * 2}px`;
+    el.style.boxShadow = `inset 0 0 0 ${1 / zoom}px ${guide.color || 'rgba(124, 124, 142, 0.9)'}`;
+    el.hidden = false;
+  }
+
+  /** Esconde o guia do raio (chamada sem argumento tambem vale). */
+  hideDrawGuide() {
+    const el = this.$.drawGuide;
+    if (el) el.hidden = true;
+  }
+
+  /**
    * Garante 2cm (75.6px a 96dpi) de margem real em volta da pagina.
    *
    * Dois ajustes sao necessarios porque `transform: scale()` e apenas
