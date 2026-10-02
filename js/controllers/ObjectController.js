@@ -262,7 +262,7 @@ export class ObjectController {
 
     if (isEditing) this._fillGraphForm(existing.graphSpec);
     else this._fillGraphForm(null); // 'G' sempre abre com os defaults
-    this._setGraphModalMode(isEditing, !isEditing);
+    this._setGraphModalMode(isEditing);
 
     this.drawGraphPreview(isEditing ? this._currentGraphSpec() : null);
     $.graphModal.classList.remove('hidden');
@@ -285,8 +285,8 @@ export class ObjectController {
    * Escreve os parametros de um grafico no formulario do modal.
    *
    * Graficos inseridos antes do `graphSpec` existir nao tem o que
-   * reconstruir: o modal abre com os valores padrao e um aviso, em vez de
-   * fingir que conhece o desenho.
+   * reconstruir: o modal abre com os valores padrao, em vez de fingir que
+   * conhece o desenho.
    *
    * @param {object|null} spec
    */
@@ -294,8 +294,7 @@ export class ObjectController {
     const $ = this.toolbox.$;
     // Sem spec, os defaults originais do formulario (e nao o que estiver
     // nos campos agora): abrir um grafico legado nao pode herdar o que
-    // o usuario digitou numa edicao anterior. O aviso no modal diz que
-    // os campos chegaram vazios.
+    // o usuario digitou numa edicao anterior.
     const source = spec || this._graphDefaults || this._currentGraphSpec();
 
     if ($.graphFunction) $.graphFunction.value = source.funcStr;
@@ -312,29 +311,14 @@ export class ObjectController {
   /**
    * Ajusta os textos do modal ao modo (criar ou editar).
    * @param {boolean} isEditing
-   * @param {boolean} [hasSpec]
    */
-  _setGraphModalMode(isEditing, hasSpec) {
+  _setGraphModalMode(isEditing) {
     const $ = this.toolbox.$;
     if ($.graphModalTitle) {
       $.graphModalTitle.textContent = isEditing ? 'Editar Grafico' : 'Criar Grafico';
     }
     if ($.insertGraphBtn) {
       $.insertGraphBtn.textContent = isEditing ? 'Salvar' : 'Inserir Grafico';
-    }
-    if ($.graphModalHint) {
-      // O aviso so aparece quando falta o spec, ou quando ha spec e vale
-      // lembrar que a edicao repinta. Sem spec, o texto e obrigatorio:
-      // o formulario abre no padrao e o usuario precisa saber disso.
-      if (isEditing) {
-        $.graphModalHint.textContent = hasSpec
-          ? 'Altere os parametros e salve para repintar o grafico.'
-          : 'Este grafico foi criado antes de os parametros serem salvos. Ajuste os campos e salve para repintar a partir deles.';
-        $.graphModalHint.hidden = false;
-      } else {
-        $.graphModalHint.textContent = '';
-        $.graphModalHint.hidden = true;
-      }
     }
   }
 
@@ -345,7 +329,7 @@ export class ObjectController {
   cancelGraphEdit() {
     if (!this._editingGraph) return;
     this._editingGraph = null;
-    this._setGraphModalMode(false, false);
+    this._setGraphModalMode(false);
   }
 
   /**
@@ -416,7 +400,7 @@ export class ObjectController {
     if (obj.dom) obj.render();
 
     this.drawGraphPreview(spec);
-    this._setGraphModalMode(false, false);
+    this._setGraphModalMode(false);
     this._editingGraph = null;
     this.toolbox.$.graphModal.classList.add('hidden');
 

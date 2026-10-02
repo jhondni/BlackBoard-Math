@@ -1134,18 +1134,6 @@ body.dark-mode #whiteboard::before {
 /* ============================================
    GRAPH MODAL
    ============================================ */
-.modal-hint {
-  margin: 0 0 14px;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-.modal-hint[hidden] { display: none; }
-
 .graph-input-area {
   margin-bottom: 16px;
 }
