@@ -1038,8 +1038,17 @@ body.dark-mode #whiteboard::before {
   color: var(--text-primary);
 }
 
-.close-modal-btn.btn-ghost {
+/* O `.close-modal-btn` e tambem o gancho de JS que fecha o modal
+   (BoardController liga o clique em todo botao com essa classe), entao os
+   botoes de texto do rodape -- "Cancelar" e "Entendido!" -- carregam a
+   classe e herdam o quadrado de 32x32 que serve ao botao de icone do
+   cabecalho. Sem liberar as duas dimensoes, "Entendido!" transborda a
+   caixa; a regra valia so para `.btn-ghost`, que e por isso que o
+   "Cancelar" saia menos quebrado que o "Entendido!". */
+.close-modal-btn.btn-ghost,
+.close-modal-btn.btn-glow {
   width: auto;
+  height: auto;
 }
 
 .modal-body {
