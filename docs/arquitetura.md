@@ -85,6 +85,16 @@ Camada de suporte usada pelos models/views:
 - `MathEditorView` — modal de inserção/edição de equação LaTeX.
 - `SelectionView` — arrastar, redimensionar e selecionar objetos.
 
+A barra lateral de páginas vive fora do `BoardView`: ela é estado de UI, não de
+documento. `BoardController.togglePagesSidebar()` escreve três classes juntas —
+`.collapsed` no `#pages-sidebar`, `.sidebar-collapsed` no `#workspace` e `.hidden`
+na `#sidebar-tab` — e o CSS faz o resto, porque o `transform` da barra e o
+`padding-left` do `#workspace` já são transicionados. Esse padding é o acoplamento:
+ele vale `calc(var(--sidebar-width) + var(--zoom-margin))` para a página não ficar
+sob a barra, então a segunda classe o devolve a `--zoom-margin`; sem ela sobraria uma
+faixa morta de `--sidebar-width` à esquerda da lousa. A barra não entra em PDF/PNG: o
+`html2canvas` cobre só o `#whiteboard`.
+
 ### Camadas da lousa
 
 Duas camadas independentes, como duas janelas sobrepostas dentro do `#whiteboard`:

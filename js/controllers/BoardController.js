@@ -71,6 +71,11 @@ export class BoardController {
     this.toolbar.onHelp = () => this.openHelp();
     this.toolbar.onExport = () => this.openExport();
 
+    // Barra de paginas recolhida. Estado de UI, nao de documento: a
+    // classe vive no DOM e some no reload, junto com a aba de reabertura.
+    this.$.toggleSidebarBtn.addEventListener('click', () => this.togglePagesSidebar());
+    this.$.sidebarTab.addEventListener('click', () => this.togglePagesSidebar(false));
+
     // Ferramentas que abrem modais/imagens
     this.toolController.onRequestEquation = () => this.objectController.openEquationModal();
     this.toolController.onRequestGraph = () => this.objectController.openGraphModal();
@@ -310,6 +315,18 @@ export class BoardController {
   }
 
   /* ---- Renderizacao de paginas --- */
+
+  /**
+   * Desenha a lista de paginas da sidebar.
+   *
+   * O rotulo vem do indice, nunca de `page.name`: o nome e um texto
+   * gravado no momento da criacao e nada o renumera. Apagar a pagina 1
+   * deixava a pagina 2 como unica da lista continuando rotulada "Pagina
+   * 2", e o mesmo vale para um `localStorage` antigo ou para um projeto
+   * JSON importado, cujos nomes podem vir em qualquer ordem. Como nao ha
+   * renomear pagina na UI, `page.name` nunca foi lido em outro lugar e a
+   * posicao na lista e a unica identidade que a sidebar precisa mostrar.
+   */
   renderPagesList() {
     const list = this.$.pagesList;
     list.innerHTML = '';
@@ -319,8 +336,7 @@ export class BoardController {
       item.innerHTML = `
         <div class="page-thumb"></div>
         <div class="page-info">
-          <div class="page-name">${page.name}</div>
-          <div class="page-number">Pagina ${i + 1}</div>
+          <div class="page-name">Pagina ${i + 1}</div>
         </div>
         <button class="page-delete-btn" data-index="${i}" title="Remover">&times;</button>
       `;
@@ -394,6 +410,30 @@ export class BoardController {
     this.boardView.clearLayer();
     this.commitHistory();
     this.showToast('Pagina limpa');
+  }
+
+  /* ---- Barra de paginas ---- */
+
+  /**
+   * Recolhe ou expande a barra lateral de paginas.
+   *
+   * Sao tres classes e nada mais: `transform` desloca a sidebar, o
+   * `padding-left` do #workspace devolve a faixa que ela ocupava e a aba
+   * reaparece. As duas primeiras propriedades ja sao transicionadas no
+   * CSS, entao o recolhimento sai animado sem JS de animacao. As tres
+   * classes sao escritas aqui juntas de proposito: o padding do #workspace
+   * e acoplado a largura da sidebar em `calc()`, e sem a segunda classe
+   * sobraria uma faixa morta a esquerda da lousa.
+   *
+   * @param {boolean} [collapsed] omitido, alterna o estado atual.
+   */
+  togglePagesSidebar(collapsed) {
+    const isCollapsed = this.$.pagesSidebar.classList.contains('collapsed');
+    const next = collapsed === undefined ? !isCollapsed : collapsed;
+
+    this.$.pagesSidebar.classList.toggle('collapsed', next);
+    this.$.workspace.classList.toggle('sidebar-collapsed', next);
+    this.$.sidebarTab.classList.toggle('hidden', !next);
   }
 
   /* ---- Biblioteca ---- */

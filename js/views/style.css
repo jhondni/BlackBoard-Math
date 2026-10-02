@@ -406,6 +406,65 @@ body {
   transform: scale(0.9);
 }
 
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- Recolhimento da barra de paginas ----
+
+   O recolhimento e uma classe na sidebar e outra no #workspace, e as duas
+   sao escritas sempre juntas pelo BoardController.togglePagesSidebar().
+   Sao as duas propriedades que o CSS ja transiciona -- `transform` da
+   sidebar e `padding` do #workspace -- entao o movimento sai animado sem
+   nenhum JS de animacao.
+
+   A segunda classe e obrigatoria: `padding-left` do #workspace vale
+   `calc(var(--sidebar-width) + var(--zoom-margin))` para a pagina nunca
+   ficar sob a barra, entao sem devolvê-lo sobraria uma faixa morta de
+   `--sidebar-width` a esquerda da lousa. */
+
+#pages-sidebar.collapsed {
+  transform: translateX(-100%);
+}
+
+#workspace.sidebar-collapsed {
+  padding-left: var(--zoom-margin, 40px);
+}
+
+#sidebar-tab {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 149;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 60px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-sidebar);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+
+#sidebar-tab:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+#sidebar-tab.hidden {
+  display: none;
+}
+
 #pages-list {
   flex: 1;
   overflow-y: auto;
@@ -459,13 +518,6 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.page-info .page-number {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-top: 2px;
-  font-weight: 500;
 }
 
 .page-delete-btn {

@@ -73,6 +73,8 @@ import { MouseController } from './controllers/MouseController.js';
 
     /* Sidebars / listas */
     pagesSidebar: byId('pages-sidebar'),
+    toggleSidebarBtn: byId('toggle-sidebar-btn'),
+    sidebarTab: byId('sidebar-tab'),
     pagesList: byId('pages-list'),
     librarySidebar: byId('library-sidebar'),
     librarySearchInput: byId('library-search-input'),

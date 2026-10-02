@@ -23,12 +23,22 @@
         <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 2h9l5 5v13c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm8 1v6h6M8 14h8M8 18h5"/></svg>
         <span>Paginas</span>
       </div>
-      <button id="add-page-btn" title="Nova Pagina">
-        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
-      </button>
+      <div class="sidebar-actions">
+        <button id="add-page-btn" title="Nova Pagina">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button id="toggle-sidebar-btn" title="Recolher barra de paginas">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg>
+        </button>
+      </div>
     </div>
     <div id="pages-list"></div>
   </aside>
+
+  <!-- ABA DE REABERTURA: vive fora da sidebar porque some junto com ela -->
+  <button id="sidebar-tab" class="hidden" title="Abrir barra de paginas">
+    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg>
+  </button>
 
   <!-- BARRA LATERAL DE BIBLIOTECA -->
   <aside id="library-sidebar" class="hidden">

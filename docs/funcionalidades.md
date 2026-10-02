@@ -74,6 +74,11 @@ objeto, sem caso especial.
 
 ### Lousa / organização
 - **Múltiplas páginas** — barra lateral com adicionar, alternar e remover páginas; miniaturas.
+  O rótulo é derivado da posição na lista, então apagar uma página renumera as outras
+  em vez de deixar um "Pagina 3" solto como primeira.
+- **Recolher a barra de páginas** — o botão no cabeçalho a retira da tela e devolve os
+  ~240px para a lousa; uma aba na borda esquerda reabre. Estado de UI efêmero (volta
+  aberta ao recarregar).
 - **Zoom** — botões +/-, `Ctrl+Scroll` e teclas `+`/`-` (25% a 300%).
 - **Arrastar / redimensionar / selecionar** objetos com handles e menu de ações.
 - **Orientação** — retrato ⇄ paisagem.
