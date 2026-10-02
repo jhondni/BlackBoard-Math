@@ -660,6 +660,10 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xl), 0 0 0 1px var(--border);
   overflow: hidden;
+  /* O cursor vive aqui, e nao no canvas de tinta: com `pointer-events:
+     none` o canvas nao e alvo de evento algum, entao o cursor dele
+     nunca aparece. O `ToolbarView` troca este valor por ferramenta. */
+  cursor: default;
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
               height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -685,23 +689,33 @@ body.dark-mode #whiteboard::before {
     radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px);
 }
 
+/* Duas camadas independentes, como duas janelas sobrepostas:
+   a de tras e a de conteudo (imagem, grafico, equacao, texto) e a da
+   frente e a de tinta. A tinta fica ACIMA de tudo, entao o desenho
+   passa por cima de qualquer objeto sem caso especial, e mover,
+   redimensionar ou girar um objeto nunca altera o que ja foi
+   desenhado. */
+#elements-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
 #drawing-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
-  cursor: crosshair;
-}
-
-#elements-layer {
-  position: absolute;
-  inset: 0;
   z-index: 2;
+  /* A tinta e a camada da frente, mas nao pode roubar o clique: o
+     cursor precisa atravessar o canvas e chegar no objeto de baixo,
+     e o `mousedown` da caneta e da borracha e ouvido no whiteboard. */
   pointer-events: none;
 }
 
 /* Anel que mostra o raio efetivo da caneta/borracha sob o cursor.
+
    Fica dentro do whiteboard, entao acompanha o `scale()` do zoom sem
    nenhum calculo de posicao. O anel e um `box-shadow` interno e nao uma
    borda: o navegador arredonda `border-width` fracionario para 1px, o
@@ -846,13 +860,21 @@ body.dark-mode #whiteboard::before {
 /* Imagens e graficos: o bitmap preenche a caixa inteira.
    Sem `max-width/max-height` aqui, o `object-fit` mapeia cada pixel do
    cache numa area conhecida, o que permite ao ImageObject saber a
-   densidade real do bitmap exibido. */
+   densidade real do bitmap exibido.
+
+   O `<img>` nao participa do hit test: sem isto, arrastar a imagem com
+   a caneta na mao iniciaria o arrasto nativo do navegador (o icone
+   "arrastando imagem") em vez de desenhar. O alvo passa a ser o
+   `.board-element`, que e quem tem os manipuladores. */
 .image-element img,
 .graph-element img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 .board-element.blurred { filter: blur(8px); }

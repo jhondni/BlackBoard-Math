@@ -102,8 +102,11 @@ export class ToolbarView {
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     if (activeBtn) activeBtn.classList.add('active');
 
-    if (this.$.canvas) {
-      this.$.canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
+    // O whiteboard, e nao o canvas: o canvas de tinta nao recebe clique
+    // (`pointer-events: none`), entao o cursor definido nele nunca
+    // apareceria.
+    if (this.$.whiteboard) {
+      this.$.whiteboard.style.cursor = tool === 'select' ? 'default' : 'crosshair';
     }
   }
 

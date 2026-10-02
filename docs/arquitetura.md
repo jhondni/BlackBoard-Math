@@ -27,11 +27,12 @@ organizado em **ES modules** (`import`/`export`). O ponto de entrada é
                 │        MODEL        │
                 │  Board              │
                 │  BoardObject        │
-                │  MathObject         │
-                │  TextObject         │
+│  MathObject         │
+│  TextObject         │
                 │  ImageObject        │
                 │  ShapeObject        │
                 └──────────┬──────────┘
+
                            │
                       dados para
                            ▼
@@ -71,16 +72,52 @@ Camada de suporte usada pelos models/views:
 - `TextRenderer` — aplica e mede textos.
 
 ### Models (`js/models/`)
-- `BoardObject` — **classe abstrata** (posição, dimensões, rotação, seleção).
-- `MathObject`, `TextObject`, `ImageObject`, `ShapeObject` — herdam de `BoardObject`.
+- `BoardObject` — **classe abstrata** (posição, dimensões, rotação, seleção). É a base
+  de `MathObject`, `TextObject`, `ImageObject` e `ShapeObject`.
 - `Board` — contém `objects[]`, objeto selecionado, zoom, páginas, biblioteca e
-  histórico; inclui factory de objetos.
+  histórico; inclui o factory de objetos. A tinta **não** é objeto: ela é raster da
+  página (`page.drawingData`), ver "Camadas da lousa".
 
 ### Views (`js/views/`)
-- `BoardView` — gerencia o DOM da lousa (canvas + camada de elementos).
+- `BoardView` — gerencia o DOM da lousa (canvas de tinta + camada de objetos),
+  dimensiona o backing store do canvas, pinta o fundo salvo e o anel do raio.
 - `ToolbarView` — barra flutuante e barra de controles.
 - `MathEditorView` — modal de inserção/edição de equação LaTeX.
 - `SelectionView` — arrastar, redimensionar e selecionar objetos.
+
+### Camadas da lousa
+
+Duas camadas independentes, como duas janelas sobrepostas dentro do `#whiteboard`:
+
+| Camada | z-index | Conteúdo | Recebe clique |
+| --- | --- | --- | --- |
+| `#elements-layer` | 1 | imagem, gráfico, equação, texto (`pointer-events: none`; cada `.board-element` reativa com `pointer-events: all`) | sim |
+| `#drawing-canvas` | 2 | **toda a tinta**, em raster | não (`pointer-events: none`) |
+
+Consequências diretas do desenho estar **acima** de tudo:
+
+- A caneta (`D`) e a borracha (`X`) funcionam sobre a página vazia e sobre imagem,
+  gráfico, equação e texto, sem nenhum caso especial: não há superfície proibida
+  nem nada a "migrar" quando o traço atravessa a borda de um objeto.
+- Mover, redimensionar, girar ou apagar um objeto **não altera a tinta** — são
+  camadas independentes, e o desenho fica onde foi traçado.
+- A borracha remove o alfa do canvas (`globalCompositeOperation = 'destination-out'`),
+  e não pinta branco: o que estiver embaixo — a imagem, o gráfico, a equação ou o
+  papel — aparece por baixo. É o que faz "apagar o desenho, nunca a imagem".
+- Como o canvas não participa do hit test, o clique chega no objeto de baixo e a
+  `SelectionView` continua arrastando e redimensionando sem manobra de fase de
+  captura.
+- O `MouseController` por isso escuta `mousedown`/`mousemove` no **`#whiteboard`** (e
+  `mouseup` no `document`, para o gesto terminado fora da página): o whiteboard é o
+  único ancestral comum da página vazia e dos elementos. O `ToolbarView` define o
+  cursor nele, e não no canvas, que nunca é alvo de evento.
+- O PDF/PNG (`html2canvas` sobre o `#whiteboard`) leva a tinta **acima** dos objetos,
+  porque a hierarquia já é essa; a miniatura da página mostra só a tinta, sobre o
+  branco do papel.
+
+Limite honesto do modelo: sendo raster de página, a tinta é reescalada quando a
+página troca de orientação (ver `stack.md`), e o undo/redo continua operando sobre os
+objetos — ele não desfaz um traço.
 
 ### Controllers (`js/controllers/`)
 - `BoardController` — orquestra páginas, zoom, undo/redo, persistência,
@@ -88,11 +125,31 @@ Camada de suporte usada pelos models/views:
 - `ToolController` — ferramentas da barra e atalhos de teclado.
 - `ObjectController` — criar/editar/remover equações, textos, imagens, gráficos
   e a biblioteca.
-- `MouseController` — desenho livre, borracha e blur no canvas.
+- `MouseController` — desenho livre, borracha e blur na camada de tinta, e criação
+  de texto por clique/arrasto. Ele decide pelo contexto do clique: sobre
+  um elemento só `D` e `X` agem; `select`, `text` e `blur` são respondidos pela
+  `SelectionView`, que para a propagação no próprio elemento.
 
 ## Estrutura de pastas
 
 ```
+lousa-online/
+├── index.html
+├── js/views/style.css
+├── .gitignore
+├── assets/
+│   └── svg/
+├── docs/                    # esta documentação
+└── js/
+    ├── app.js               # ponto de entrada (ES module)
+    ├── models/   Board.js, BoardObject.js, MathObject.js, TextObject.js,
+    │             ImageObject.js, ShapeObject.js
+    ├── views/    BoardView.js, ToolbarView.js, MathEditorView.js, SelectionView.js
+    ├── controllers/  BoardController.js, ToolController.js,
+    │                 ObjectController.js, MouseController.js
+    └── renderers/   MathRenderer.js, SVGRenderer.js, TextRenderer.js
+```
+
 lousa-online/
 ├── index.html
 ├── style.css
@@ -103,7 +160,7 @@ lousa-online/
 └── js/
     ├── app.js               # ponto de entrada (ES module)
     ├── models/   Board.js, BoardObject.js, MathObject.js, TextObject.js,
-    │             ImageObject.js, ShapeObject.js
+    │             ImageObject.js, ShapeObject.js, StrokeObject.js
     ├── views/    BoardView.js, ToolbarView.js, MathEditorView.js, SelectionView.js
     ├── controllers/  BoardController.js, ToolController.js,
     │                 ObjectController.js, MouseController.js

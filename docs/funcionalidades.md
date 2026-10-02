@@ -16,6 +16,38 @@
   para o `drawingData`, nem para o histórico, nem para o export.
 - **Borracha** — apaga trechos do desenho (`X`); um clique sem arrastar apaga
   um ponto, como a caneta.
+
+### Desenho sobre imagem, gráfico, equação e texto
+A lousa funciona como **duas janelas sobrepostas**: a de trás é o conteúdo
+(imagem, gráfico, equação, texto) e a da frente é a tinta. Todo desenho feito
+com `D` nasce na camada da frente, então aparece **por cima** de qualquer
+objeto, sem caso especial.
+
+- **Por que a imagem não bloqueia mais a caneta** — antes, `#drawing-canvas`
+  ficava em `z-index: 1`, atrás da camada de objetos, então o clique nascia no
+  elemento e o traço aparecia escondido atrás do bitmap. Agora o canvas de
+  tinta é a camada **da frente** (`z-index: 2`) e vale para toda a página.
+- **O traço atravessa qualquer coisa** — um gesto que nasce na margem e passa
+  por cima da imagem, do gráfico, da equação ou do texto é um traço só e
+  contínuo: não há superfície proibida nem "migração" de gesto quando o cursor
+  entra ou sai de um objeto. Atravessar a borda de um elemento também não
+  interrompe a curva, o que antes deixava a linha congelar na borda e saltar
+  em linha reta na saída.
+- **Mover, redimensionar, girar ou apagar o objeto não mexe no desenho** — as
+  camadas são independentes: a tinta não é filha de nenhum elemento, e o
+  traço permanece exatamente onde foi traçado.
+- **A borracha apaga o desenho, nunca a imagem** — `X` remove o alfa do canvas
+  (`destination-out`) em vez de pintar branco. Por isso o que estiver embaixo
+  — a imagem, o gráfico, a equação ou o papel — aparece por baixo, e apagar
+  sobre uma imagem não deixa borrão nenhum.
+- **A seleção continua funcionando** — o canvas de tinta tem
+  `pointer-events: none`, então o clique atravessa e chega no objeto de baixo:
+  `V` arrasta e redimensiona normalmente, e o traço nunca bloqueia a seleção.
+- **Fora do escopo: apagar um objeto** — `Delete` remove o elemento; como a
+  tinta é outra camada, o desenho que estava sobre ele permanece.
+- **Limite honesto** — a tinta é raster de página: trocar a orientação
+  reescala o desenho, e o undo/redo continua operando sobre os objetos, sem
+  desfazer um traço.
 - **Blur nas equações / desenho** — ferramenta borrar (`B`) desfoca por região do canvas; elementos também têm toggle de blur.
 - **Texto livre** — clicar na lousa com a ferramenta texto (`T`) cria um campo editável.
 
@@ -51,8 +83,13 @@
 - **Undo/Redo** — `Ctrl+Z` / `Ctrl+Y` (até 50 passos).
 - **Salvar automaticamente** no `localStorage` (`lousa-state`).
 - **Aviso de cota** — quando o `localStorage` estoura (`QuotaExceededError`), a lousa avisa uma única vez em vez de falhar em silêncio.
-- **Exportar** — **PDF**, **PNG** e **Projeto JSON** (modal de exportação).
+- **Exportar** — **PDF**, **PNG** e **Projeto JSON** (modal de exportação). A tinta
+  entra no PDF/PNG **acima** dos objetos, porque o canvas de tinta fica na camada
+  da frente do whiteboard.
 - **Importar** projeto JSON (arquivo ou drag & drop).
+- **Tinta no projeto JSON** — a tinta viaja em `page.drawingData` (PNG com alfa) e
+  não no objeto, então nunca há traço órfão; a miniatura da página mostra só esse
+  raster, sobre o branco do papel.
 
 ### Atalhos de teclado
 | Tecla | Ação |

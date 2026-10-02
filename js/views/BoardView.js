@@ -38,6 +38,15 @@ export class BoardView {
   /* ---- Quadro ---- */
   get canvas() { return this.$.canvas; }
   get elementsLayer() { return this.$.elementsLayer; }
+  /**
+   * Superficie que recebe os eventos de mouse da lousa.
+   *
+   * Nao e o canvas: a tinta fica numa camada da frente com
+   * `pointer-events: none`, entao o canvas nao e alvo de evento
+   * algum. O whiteboard e o unico ancestral comum da pagina vazia e
+   * dos elementos, entao e ele que enxerga os dois.
+   */
+  get whiteboard() { return this.$.whiteboard; }
 
   subscribe() {
     // O modelo notifica mudancas; a renderizacao integral fica
@@ -358,6 +367,10 @@ export class BoardView {
   clearCanvas() {
     const ctx = this.canvas.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // A borracha deixa `destination-out` no contexto; sem esta volta ao
+    // modo normal, o `clearRect` abaixo apagaria o alfa em vez de
+    // limpar, e o redesenho da pagina sairia invertido.
+    ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
@@ -369,6 +382,7 @@ export class BoardView {
   drawBackground(dataURL) {
     const ctx = this.canvas.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     if (!dataURL) return;
     const img = new Image();

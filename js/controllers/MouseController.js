@@ -1,9 +1,29 @@
 /* ============================================
    LOUSA VIRTUAL - MouseController
    ============================================
-   Controller responsavel pelos eventos de mouse no
-   canvas da lousa: desenho livre, borracha, blur e
-   criacao de objetos por clique (texto, etc).
+   Controller responsavel pelos eventos de mouse na
+   lousa: desenho livre, borracha, blur e criacao de
+   objetos por clique (texto, etc).
+
+   A tinta vive em UM canvas que fica ACIMA da camada de
+   objetos (`#drawing-canvas`, z-index 2, sobre
+   `#elements-layer`, z-index 1) e nao recebe clique
+   (`pointer-events: none`). E o que faz o desenho passar
+   por cima de imagem, grafico, equacao e texto sem caso
+   especial, e sem que a imagem "bloqueie" a caneta.
+
+   Como consequencia, os eventos sao escuchados no
+   `#whiteboard` e nao no canvas: o canvas transparente
+   nao seria alvo de nenhum evento, enquanto o whiteboard
+   e o unico ancestral que recebe o `mousedown` tanto da
+   pagina vazia quanto do elemento que estiver embaixo do
+   cursor. O clique continua chegando no elemento (o canvas
+   nao participate do hit test), entao a SelectionView
+   arrasta e redimensiona sem nenhuma manobra de fase de
+   captura.
+
+   Mover, redimensionar ou girar um objeto nao altera a
+   tinta: sao camadas independentes.
    ============================================ */
 
 export class MouseController {
@@ -28,21 +48,27 @@ export class MouseController {
   }
 
   bind() {
-    const canvas = this.boardView.canvas;
-    canvas.addEventListener('mousedown', (e) => this.onDown(e));
-    canvas.addEventListener('mousemove', (e) => this.onMove(e));
-    canvas.addEventListener('mouseup', () => this.onUp());
-    canvas.addEventListener('mouseleave', () => {
+    // O whiteboard e a unica superficie que enxerga a pagina e os
+    // objetos: o canvas de tinta nao e alvo de evento algum, e cada
+    // elemento do objeto e um alvo diferente.
+    const board = this.boardView.whiteboard;
+    board.addEventListener('mousedown', (e) => this.onDown(e));
+    board.addEventListener('mousemove', (e) => this.onMove(e));
+    board.addEventListener('mouseleave', () => {
       this.onUp();
       this.hideDrawGuide();
     });
+
+    // `mouseup` no `document`: o gesto pode terminar fora da pagina,
+    // e um listener no whiteboard nao veria essa soltura.
+    document.addEventListener('mouseup', () => this.onUp());
   }
 
   /**
    * Raio efetivo da caneta ou da borracha, em px de lousa.
    *
    * E metade da espessura com que o traço e pintado, entao o anel
-   * coincide com a area que o traço realmente cobre. A borracha paints
+   * coincide com a area que o traço realmente cobre. A borracha pinta
    * com `penSize * 4`, por isso o raio dela e `penSize * 2`.
    *
    * @param {string} tool
@@ -56,8 +82,8 @@ export class MouseController {
   }
 
   /**
-   * Cor do contorno: a da caneta quando ela desenha (a borracha pinta
-   * branco, invisivel sobre a pagina clara), e um neutro no resto.
+   * Cor do contorno: a da caneta quando ela desenha (a borracha remove
+   * o alfa, entao nao ha cor nenhuma para ver), e um neutro no resto.
    * @param {string} tool
    * @returns {string}
    */
@@ -68,9 +94,9 @@ export class MouseController {
   /**
    * Reposiciona o anel do raio sob o cursor.
    *
-   * A borracha pinta branco puro sobre uma pagina que tambem e branca:
-   * sem o anel nao ha como ver por onde ela passou. O guia e efemero,
-   * entao nada disso vai para o `drawingData` nem para o historico.
+   * A borracha nao pinta nada visivel sobre a pagina clara, entao sem
+   * o anel nao ha como ver por onde ela passou. O guia e efemero, logo
+   * nada disso vai para o `drawingData` nem para o historico.
    *
    * @param {number} x - px de lousa
    * @param {number} y - px de lousa
@@ -126,70 +152,63 @@ export class MouseController {
   }
 
   onDown(e) {
-    const { x, y } = this._toBoard(e);
-    const tool = this.toolbar.currentTool;
+    // Somente o botao principal desenha: o do meio abre o zoom automatico
+    // do navegador e o direito abriria o menu de contexto sobre a lousa.
+    if (e.button !== 0) return;
 
-    if (tool === 'draw') {
+    const tool = this.toolbar.currentTool;
+    // Sobre um elemento, `select`, `text` e `blur` sao respondidos pela
+    // SelectionView (que para a propagacao no proprio elemento). Aqui
+    // so interessa `draw` e `eraser`, que funcionam em qualquer
+    // superficie -- inclusive sobre a imagem, o grafico, a equacao e o
+    // texto.
+    const onElement = Boolean(e.target && e.target.closest && e.target.closest('.board-element'));
+    if (onElement && tool !== 'draw' && tool !== 'eraser') return;
+
+    const { x, y } = this._toBoard(e);
+
+    if (tool === 'draw' || tool === 'eraser') {
+      // Sem isto o navegador inicia uma selecao de texto (o whiteboard
+      // tem `user-select` liberado) e solta a "arrastando" uma imagem.
+      e.preventDefault();
       this.isDrawing = true;
-      this.lastX = x; this.lastY = y;
-      this._beginPath(this.board.penColor, this.board.penSize);
-    } else if (tool === 'eraser') {
-      this.isDrawing = true;
-      this.lastX = x; this.lastY = y;
-      this._beginPath('#ffffff', this.board.penSize * 4);
+      this.lastX = x;
+      this.lastY = y;
+      this._beginPath(tool);
     } else if (tool === 'blur') {
       this.isDrawing = true;
       this._applyBlurAt(x, y);
     } else if (tool === 'text') {
       this._startTextBoxDrag(x, y, e);
     } else if (tool === 'select') {
+      // Clicar na pagina vazia deseleciona; clicar num elemento ja foi
+      // tratado pela SelectionView, que o selecionou.
       this.board.deselectObject();
     }
   }
 
-  /* ---- Caixa de texto (arrastar para dimensionar) ---- */
-  _startTextBoxDrag(x, y, e) {
-    this.isDrawing = true;
-    this.textBoxDrag = {
-      startX: x, startY: y, x, y,
-      sx0: e.clientX, sy0: e.clientY, // inicio em pixels de tela
-      sx: e.clientX, sy: e.clientY,   // posicao atual em pixels de tela
-    };
-    this._createTextBoxPreview();
-    this._updateTextBoxPreview();
-  }
+  /**
+   * Abre o caminho do gesto e pinta o ponto de ancoragem.
+   *
+   * A borracha nao pinta branco: a tinta fica ACIMA dos objetos, entao um
+   * branco aqui viraria um borrão sobre a imagem. Ela remove o alfa do
+   * canvas (`destination-out`), e o que estiver embaixo -- a imagem, o
+   * grafico, a equacao ou o papel -- aparece por baixo. E exatamente o
+   * pedido: a borracha apaga o desenho, nunca a imagem.
+   *
+   * @param {'draw'|'eraser'} tool
+   */
+  _beginPath(tool) {
+    const erase = tool === 'eraser';
+    const color = erase ? 'rgba(0, 0, 0, 1)' : this.board.penColor;
+    const size = erase ? this.board.penSize * 4 : this.board.penSize;
 
-  _createTextBoxPreview() {
-    if (this.textBoxPreview) return;
-    const el = document.createElement('div');
-    el.className = 'text-box-preview';
-    this.boardView.elementsLayer.appendChild(el);
-    this.textBoxPreview = el;
-  }
-
-  _updateTextBoxPreview() {
-    const el = this.textBoxPreview;
-    const d = this.textBoxDrag;
-    if (!el || !d) return;
-    el.style.left = Math.min(d.startX, d.x) + 'px';
-    el.style.top = Math.min(d.startY, d.y) + 'px';
-    el.style.width = Math.max(4, Math.abs(d.x - d.startX)) + 'px';
-    el.style.height = Math.max(4, Math.abs(d.y - d.startY)) + 'px';
-  }
-
-  _removeTextBoxPreview() {
-    if (this.textBoxPreview) {
-      this.textBoxPreview.remove();
-      this.textBoxPreview = null;
-    }
-  }
-
-  _beginPath(color, size) {
     const ctx = this.boardView.canvas.getContext('2d');
     this._applyCanvasTransform(ctx);
     // Antes de abrir o caminho do traço: `_paintDot` fecha o caminho dele.
-    this._paintDot(color, size);
+    this._paintDot(color, size, erase);
     ctx.beginPath();
+    ctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
     ctx.strokeStyle = color;
     ctx.lineWidth = size;
     ctx.lineCap = 'round';
@@ -214,11 +233,13 @@ export class MouseController {
    *
    * @param {string} color
    * @param {number} size - espessura em px de lousa
+   * @param {boolean} [erase] - `true` para remover alfa em vez de pintar
    */
-  _paintDot(color, size) {
+  _paintDot(color, size, erase = false) {
     const ctx = this.boardView.canvas.getContext('2d');
     this._applyCanvasTransform(ctx);
     ctx.beginPath();
+    ctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
     ctx.fillStyle = color;
     ctx.arc(this.lastX, this.lastY, Math.max(0.5, size / 2), 0, Math.PI * 2);
     ctx.closePath();
@@ -227,7 +248,7 @@ export class MouseController {
 
   onMove(e) {
     // Antes do guarda de `isDrawing`: o guia tambem aparece com o mouse
-    // apenas sobrevoando o canvas, sem traco em andamento.
+    // apenas sobrevoando a lousa, sem traco em andamento.
     const { x, y } = this._toBoard(e);
     this._updateGuide(x, y);
     if (!this.isDrawing) return;
@@ -242,9 +263,12 @@ export class MouseController {
     }
 
     const tool = this.toolbar.currentTool;
-    const ctx = this.boardView.canvas.getContext('2d');
 
     if (tool === 'draw' || tool === 'eraser') {
+      // Nao ha superficie proibida: o traço atravessa a imagem, o
+      // grafico, a equacao e o texto sem interromper, porque a tinta e
+      // uma camada so, acima de tudo.
+      const ctx = this.boardView.canvas.getContext('2d');
       this._applyCanvasTransform(ctx);
       ctx.lineTo(x, y);
       ctx.stroke();
@@ -281,9 +305,52 @@ export class MouseController {
       return;
     }
 
+    // A composicao volta ao normal: a borracha deixa `destination-out`
+    // no contexto, e o proximo a repintar a pagina (ou o proximo traço)
+    // precisa pintar de verdade.
     const ctx = this.boardView.canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'source-over';
     ctx.closePath();
     if (this.onStrokeEnd) this.onStrokeEnd();
+  }
+
+  /* ---- Caixa de texto (arrastar para dimensionar) ---- */
+  _startTextBoxDrag(x, y, e) {
+    this.isDrawing = true;
+    this.textBoxDrag = {
+      startX: x, startY: y, x, y,
+      sx0: e.clientX, sy0: e.clientY, // inicio em pixels de tela
+      sx: e.clientX, sy: e.clientY,   // posicao atual em pixels de tela
+    };
+    this._createTextBoxPreview();
+    this._updateTextBoxPreview();
+  }
+
+  _createTextBoxPreview() {
+    if (this.textBoxPreview) return;
+    const el = document.createElement('div');
+    el.className = 'text-box-preview';
+    // No whiteboard, e nao na camada de objetos: a previa ficaria
+    // atras da tinta, que agora e a camada da frente.
+    this.boardView.whiteboard.appendChild(el);
+    this.textBoxPreview = el;
+  }
+
+  _updateTextBoxPreview() {
+    const el = this.textBoxPreview;
+    const d = this.textBoxDrag;
+    if (!el || !d) return;
+    el.style.left = Math.min(d.startX, d.x) + 'px';
+    el.style.top = Math.min(d.startY, d.y) + 'px';
+    el.style.width = Math.max(4, Math.abs(d.x - d.startX)) + 'px';
+    el.style.height = Math.max(4, Math.abs(d.y - d.startY)) + 'px';
+  }
+
+  _removeTextBoxPreview() {
+    if (this.textBoxPreview) {
+      this.textBoxPreview.remove();
+      this.textBoxPreview = null;
+    }
   }
 
   /**
