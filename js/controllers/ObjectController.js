@@ -204,10 +204,11 @@ export class ObjectController {
         if (this.onPersist) this.onPersist();
       });
     } else {
-      // Nova equacao
+      // Nova equacao. Inserir nao salva mais na biblioteca: quem decide
+      // e o botao da barra do elemento, entao a biblioteca so cresce com
+      // o que o usuario escolheu guardar.
       this.mathEditor.open('', (latex) => {
         this.createEquation(latex);
-        this.saveToLibrary(latex);
       });
     }
   }
@@ -652,13 +653,22 @@ export class ObjectController {
   /* ---- Biblioteca de equacoes ---- */
   /**
    * Salva uma equacao na biblioteca.
+   *
+   * O LaTeX e a identidade do item: salvar o mesmo texto de novo nao
+   * cria uma segunda entrada igual, e o retorno diz qual dos dois casos
+   * foi, para o caller poder avisar em vez de mentir no toast.
+   *
    * @param {string} latex
+   * @returns {boolean} false se vazio ou ja existente.
    */
   saveToLibrary(latex) {
-    if (!latex) return;
+    if (!latex) return false;
+    const already = this.board.library.some(item => item.latex === latex);
+    if (already) return false;
     this.board.library.push({ id: Date.now(), latex, label: latex.substring(0, 40) });
     if (this.onPersist) this.onPersist();
     if (this.onLibraryChange) this.onLibraryChange();
+    return true;
   }
 
   removeFromLibrary(id) {

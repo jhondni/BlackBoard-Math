@@ -112,6 +112,15 @@ export class BoardController {
       if (obj.type === 'text') return this.objectController.focusText(obj);
     };
     this.selectionView.onEditText = (obj) => this.objectController.focusText(obj);
+    // Salvar na biblioteca e por equacao, nao no ato de inserir: aqui o
+    // `false` do `saveToLibrary` significa "ja estava na biblioteca", e o
+    // toast precisa dizer isso em vez de confirmar um salvamento que nao
+    // aconteceu.
+    this.selectionView.onSaveToLibrary = (obj) => {
+      if (!obj || !obj.latex) return;
+      const saved = this.objectController.saveToLibrary(obj.latex);
+      this.showToast(saved ? 'Equacao salva na biblioteca' : 'Equacao ja esta na biblioteca');
+    };
     this.selectionView.onBlurObject = (obj, force) => {
       obj.applyBlur(force !== undefined ? force : !obj.blurred);
       this.board.deselectObject();
@@ -126,9 +135,9 @@ export class BoardController {
     // Biblioteca
     this.$.saveToLibraryBtn.addEventListener('click', () => {
       this.mathEditor.open('', (latex) => {
-        this.objectController.saveToLibrary(latex);
+        const saved = this.objectController.saveToLibrary(latex);
         this.renderLibrary();
-        this.showToast('Equacao salva na biblioteca');
+        this.showToast(saved ? 'Equacao salva na biblioteca' : 'Equacao ja esta na biblioteca');
       });
     });
     this.$.librarySearchInput.addEventListener('input', () => this.renderLibrary());

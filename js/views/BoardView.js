@@ -128,9 +128,13 @@ export class BoardView {
     // 'graph' ou 'image'.
     const editable = obj.type === 'equation' || obj.type === 'text' || obj.type === 'graph';
     const editLabel = obj.type === 'graph' ? 'Editar Grafico' : 'Editar';
+    // Salvar na biblioteca e exclusivo de equacao: texto, imagem e grafico
+    // nao tem LaTeX para guardar.
+    const savable = obj.type === 'equation';
 
     el.innerHTML += `
       <div class="element-actions">
+        ${savable ? `<button class="save-lib-btn" title="Salvar na biblioteca">&#128278;</button>` : ''}
         ${editable ? `<button class="edit-eq-btn" title="${editLabel}">&#9998;</button>` : ''}
         <button class="blur-btn" title="Borrar">&#128065;</button>
         <button class="delete-btn" title="Remover">&times;</button>

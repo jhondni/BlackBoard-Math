@@ -55,6 +55,11 @@ objeto, sem caso especial.
 - **Editor de equações** (`E`) — modal com `textarea`, **preview em tempo real** (KaTeX) e **templates** (fração, raiz, potência, integral, soma, limite, matriz, gregas, lógica, vetores).
 - **Equações redimensionáveis e editáveis** — o objeto de equação pode ser movido, redimensionado (handles) e reeditado pelo botão na seleção.
 - **Biblioteca de equações** — salvar equações (`Salvar equação`), reutilizá-las clicando no item, busca e remoção.
+- **Salvamento é por botão, não automático** — inserir uma equação (`E`) só a coloca na
+  lousa; nada vai para a biblioteca sem pedido explícito. Quem guarda é o botão
+  **salvar na biblioteca** da barra de ações do elemento (`class="element-actions"`),
+  emitido só para equações. Inserir uma equação repetida não incha a biblioteca com
+  cópias: o LaTeX é a identidade do item e o aviso distingue "salva" de "já estava".
 
 ### Gráficos
 - **Criar gráfico** (`G`) — modal com função `f(x)`, domínio (xmin/xmax/ymin/ymax), cor e largura; preview em canvas e inserção na lousa.

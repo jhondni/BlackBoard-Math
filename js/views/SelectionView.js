@@ -23,6 +23,7 @@ export class SelectionView {
     // decide qual modal abrir.
     this.onEditObject = null; // callback (obj) => void
     this.onEditText = null; // callback (obj) => void -> editar texto (ferramenta texto)
+    this.onSaveToLibrary = null; // callback (obj) => void -> guardar equacao
     this.onDeleteObject = null; // callback (obj) => void
     this.onBlurObject = null; // callback (obj) => void
     this.onCommitChange = null; // callback () => void (salvar historico)
@@ -71,6 +72,14 @@ export class SelectionView {
       editBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (this.onEditObject) this.onEditObject(obj);
+      });
+    }
+
+    const saveLibBtn = el.querySelector('.save-lib-btn');
+    if (saveLibBtn) {
+      saveLibBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.onSaveToLibrary) this.onSaveToLibrary(obj);
       });
     }
   }
