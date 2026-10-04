@@ -15,6 +15,17 @@ export class BoardController {
   /** Espera (ms) antes de refazer bitmaps apos uma troca de zoom. */
   static QUALITY_DEBOUNCE_MS = 80;
 
+  /** Pixels de saida por pixel da pagina, no PDF e no PNG. */
+  static EXPORT_SCALE = 2;
+
+  /**
+   * Pontos PDF por pixel CSS. O PDF e medido em `pt` (1/72") e o browser
+   * em px (1/96"), entao 1 px = 72/96 = 0,75 pt. Deixar o jsPDF em
+   * `unit: 'px'` faz o contrario -- ele multiplica por 96/72 = 4/3 -- e a
+   * folha sai 1,78x maior que o papel, com o A4 virando 52,8 x 37,3 cm.
+   */
+  static PX_TO_PT = 72 / 96;
+
   /** Ja avisou que o localStorage estourou (evita toast repetido). */
   #quotaWarned = false;
 
@@ -256,8 +267,18 @@ export class BoardController {
     return page;
   }
 
-  _switchPage(index) {
-    if (index < 0 || index >= this.board.pages.length) return;
+  /**
+ * Troca a pagina visivel.
+ *
+ * Devolve a Promise do repinte da tinta (ver `BoardView.drawBackground`),
+ * para quem precisar do canvas ja pintado -- hoje so o export multipagina.
+ * Quem so quer trocar a pagina pode ignorar o retorno, como antes.
+ *
+ * @param {number} index
+ * @returns {Promise<void>}
+ */
+_switchPage(index) {
+    if (index < 0 || index >= this.board.pages.length) return Promise.resolve();
     this._saveCurrentPage();
     this.board.currentPageIndex = index;
 
@@ -271,10 +292,11 @@ export class BoardController {
     this.board.clear();
     this.boardView.clearLayer();
 
-    if (page.drawingData) this.boardView.drawBackground(page.drawingData);
+    const pintado = this.boardView.drawBackground(page.drawingData);
     page.elements.forEach(el => this._restoreFromSerialized(el));
     this._saveState();
     this.renderPagesList();
+    return pintado;
   }
 
   deletePage(index) {
@@ -578,48 +600,356 @@ export class BoardController {
     });
   }
 
-  exportPDF() {
-    this._saveCurrentPage();
-    // O anel do raio vive dentro do whiteboard: se estivesse visivel no
-    // momento da captura, sairia impresso no PDF.
+  /**
+   * Captura a folha inteira na proporcao do papel, com o zoom desligado.
+   *
+   * O `html2canvas` dimensiona a captura por `getBoundingClientRect()`, e
+   * esse retangulo ja inclui o `transform: scale(zoom)` que o `BoardView`
+   * aplica no `#whiteboard`. O canvas de saida saia com o tamanho da TELA
+   * (794 x zoom) e, pior, com o conteudo escalado e deslocado dentro dele:
+   * medido em 200%, das 9 referencias numa pagina so 1 aparecia no lugar.
+   * O scroll da `#workspace` (que o `centerOnPage` mexe) somava o resto do
+   * deslocamento.
+   *
+   * Zerar o transform durante a captura resolve os dois de uma vez: o
+   * retangulo volta a ser o papel. Como `transform` e so visual, ele nao
+   * participa do layout -- o `offsetWidth`/`offsetHeight` da folha e o
+   * `--page-width`/`--page-height` continuam valer -- entao a pagina
+   * reservas a propria dimensao e o html2canvas captura a folha inteira, na
+   * orientation corrente, com a proporcao do papel. O `finally` restaura o
+   * zoom mesmo se a captura falhar.
+   *
+   * @returns {Promise<HTMLCanvasElement>}
+   */
+  async _capturePage() {
+    const wb = this.$.whiteboard;
+    // O anel do raio vive dentro da folha: se estivesse visivel no momento
+    // da captura, sairia impresso no PDF.
     this.boardView.hideDrawGuide();
-    this.showToast('Gerando PDF...');
-    window.html2canvas(this.$.whiteboard, { scale: 2, backgroundColor: '#ffffff' }).then((c) => {
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({
-        orientation: this.board.isLandscape ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [c.width / 2, c.height / 2]
+
+    const zoom = wb.style.transform;
+    wb.style.transform = 'none';
+    try {
+      return await window.html2canvas(wb, {
+        scale: BoardController.EXPORT_SCALE,
+        backgroundColor: '#ffffff'
       });
-      pdf.addImage(c.toDataURL('image/png'), 'PNG', 0, 0, c.width / 2, c.height / 2);
-      pdf.save('lousa-virtual.pdf');
-      this.showToast('PDF exportado!');
-      this.$.exportModal.classList.add('hidden');
-    });
+    } finally {
+      wb.style.transform = zoom;
+    }
+  }
+
+/**
+   * Captura TODAS as paginas do projeto, uma por vez.
+   *
+   * O `#whiteboard` so tem a pagina visivel: `_switchPage` faz
+   * `clearLayer()` e reconstroi a camada de objetos da pagina alvo. O
+   * unico jeito de fotografar as demais e mudar para cada uma e capturar,
+   * entao o percurso e sequencial e a pagina original volta no `finally`.
+   *
+   * A espera entre capturas NAO e um timeout, e o repinte da tinta
+   * devolvido por `_switchPage`. O `html2canvas` espera as `<img>` da
+   * camada, mas nao espera um canvas ja desenhado: ele le os pixels
+   * quando clona o DOM, e o `drawBackground` so pinta depois do
+   * `img.onload`. Medido numa pagina que so tinha tinta -- 0 px sem
+   * espera, 161.364 px com um `requestAnimationFrame`, 242.398 px com
+   * 50 ms. Um frame cai dentro dessa janela, ou seja, era meio cara de
+   * moeda: as primeiras folhas saiam em branco conforme o
+   * agendamento da maquina. As `<img>` (graficos, imagens, equacoes) nao
+   * têm esse problema e nao precisam de espera nenhuma.
+   *
+   * A transicao de largura/altura da folha (0.4 s no CSS) e desligada
+   * durante o percurso: sem ela, capturar no meio da transicao daria uma
+   * folha com a proporcao da pagina anterior, e ela custava 37% do tempo
+   * (8 paginas alternando orientacao: 7,4 s com, 4,6 s sem).
+   *
+   * @returns {Promise<Array<{index:number, canvas:HTMLCanvasElement}>>}
+   */
+async _captureAllPages() {
+    const wb = this.$.whiteboard;
+    this._saveCurrentPage();
+
+    const origem = this.board.currentPageIndex;
+    const transicao = wb.style.transition;
+    const capturas = [];
+
+    wb.style.transition = 'none';
+    try {
+      for (let i = 0; i < this.board.pages.length; i++) {
+        await this._switchPage(i);
+        const canvas = await this._capturePage();
+        capturas.push({ index: i, canvas });
+        if (this.board.pages.length > 1) {
+          this.showToast(`Exportando ${i + 1}/${this.board.pages.length}...`);
+        }
+      }
+    } finally {
+      wb.style.transition = transicao;
+      // A volta e sempre feita, mesmo com falha no meio do percurso: sem
+      // isso a lousa ficaria mostrando outra pagina, com a orientacao
+      // dela, sem o aviso de que algo deu errado. A `_switchPage` tambem
+      // recoloca a orientacao global a partir de `page.orientation`.
+      // A selecao NAO volta: `_switchPage` chama `board.clear()`, que
+      // descarta os objetos, entao um `selectObject` aqui religaria uma
+      // referencia que o Model ja reconstruiu -- o mesmo estado que o
+      // usuario ve se passar pelas paginas a mao.
+      this._switchPage(origem);
+    }
+    return capturas;
+  }
+
+  /**
+   * Medidas do papel, em pontos PDF, a partir da captura.
+   *
+   * O papel e a propria imagem, nao um formato A4 escolhido a mao: com a
+   * pagina em 794 x 1123 px a 96 dpi isso ja e A4, e derivar as duas
+   * medidas da captura mantem a proporcao por construcao, sem depender do
+   * `orientation` -- que o jsPDF normaliza trocando os eixos do array, e
+   * trocaria a folha se as medidas nao batessem com ele.
+   *
+   * @param {HTMLCanvasElement} canvas
+   * @returns {{width:number, height:number, orientation:string}}
+   */
+  _pageSize(canvas) {
+    const k = BoardController.PX_TO_PT / BoardController.EXPORT_SCALE;
+    const width = canvas.width * k;
+    const height = canvas.height * k;
+    return {
+      width,
+      height,
+      orientation: width > height ? 'landscape' : 'portrait'
+    };
+  }
+
+  exportPDF() {
+    this.showToast('Gerando PDF...');
+    this._captureAllPages()
+      .then((capturas) => {
+        const { jsPDF } = window.jspdf;
+        const primeira = this._pageSize(capturas[0].canvas);
+        // `compress: true` nao e opcional: o jsPDF grava as imagens SEM
+        // compressao por padrao, ou seja, o RGB cru -- 10,7 MB por pagina
+        // A4 em 2x -- mais uma copia em escala de cinza do canal alfa,
+        // que o `toDataURL` sempre emite e que aqui e inteiramente opaco.
+        // Medido em 4 paginas: 54,4 MB sem, 0,08 MB com. Sem isso um
+        // projeto de 30 paginas passaria de 500 MB e o navegador recusa
+        // a abrir. E nao custa qualidade: e Flate, lossless.
+        const pdf = new jsPDF({
+          orientation: primeira.orientation,
+          unit: 'pt',
+          format: [primeira.width, primeira.height],
+          compress: true
+        });
+        pdf.addImage(capturas[0].canvas.toDataURL('image/png'), 'PNG', 0, 0, primeira.width, primeira.height);
+        // `addImage` escreve na folha ATUAL e `addPage` e o que avanca a
+        // folha. Criar todas as folhas primeiro e so depois gravar as
+        // imagens empilha as N imagens em 0,0 na ultima -- foi assim que
+        // a primeira pagina saia em branco.
+        for (let i = 1; i < capturas.length; i++) {
+          const s = this._pageSize(capturas[i].canvas);
+          pdf.addPage([s.width, s.height], s.orientation);
+          pdf.addImage(capturas[i].canvas.toDataURL('image/png'), 'PNG', 0, 0, s.width, s.height);
+        }
+        pdf.save('lousa-virtual.pdf');
+        this.showToast('PDF exportado!');
+        this._closeExport();
+      })
+      .catch(err => this._exportError(err));
   }
 
   exportPNG() {
-    this._saveCurrentPage();
-    this.boardView.hideDrawGuide();  // ver exportPDF
     this.showToast('Gerando PNG...');
-    window.html2canvas(this.$.whiteboard, { scale: 2, backgroundColor: '#ffffff' }).then((c) => {
-      const link = document.createElement('a');
-      link.download = 'lousa-virtual.png';
-      link.href = c.toDataURL('image/png');
-      link.click();
-      this.showToast('PNG exportado!');
-      this.$.exportModal.classList.add('hidden');
+    this._captureAllPages()
+      .then((capturas) => {
+        // PNG nao tem paginas: as N folhas vaem num ZIP store. Sem
+        // compressao de proposito -- o conteudo ja e PNG, que e deflate, e
+        // recomprimir nao ganharia nada e custaria CPU e memoria.
+        const arquivos = capturas.map(({ index, canvas }) => ({
+          nome: `pagina-${index + 1}.png`,
+          dados: this._dataURLToBytes(canvas.toDataURL('image/png'))
+        }));
+        // Uma pagina so nao ganha envelope: seria um zip com um unico
+        // arquivo, que e so um obstaculo entre o usuario e a imagem.
+        if (arquivos.length === 1) {
+          this._download(this._blobFromBytes(arquivos[0].dados), 'lousa-virtual.png');
+          this.showToast('PNG exportado!');
+        } else {
+          this._download(this._buildZip(arquivos), 'lousa-virtual.zip');
+          this.showToast(`${arquivos.length} PNGs exportados!`);
+        }
+        this._closeExport();
+      })
+      .catch(err => this._exportError(err));
+  }
+
+  _closeExport() {
+    this.$.exportModal.classList.add('hidden');
+  }
+
+  /**
+   * Falha no meio do percurso.
+   *
+   * Antes o export era uma captura so e o `then` era o fim da historia;
+   * agora sao N capturas e qualquer uma delas pode estourar, e o
+   * `finally` de `_captureAllPages` ja devolveu a lousa para a pagina
+   * original. Sem este `catch` o modal ficaria aberto para sempre e a
+   * unica pista seria um `Unhandled rejection` no console -- o usuario
+   * achando que o app travou.
+   */
+  _exportError(err) {
+    console.error('Falha ao exportar:', err);
+    this.showToast('Nao foi possivel exportar');
+    this._closeExport();
+  }
+
+  /**
+   * Monta um ZIP "store" (sem compressao) no formato ZIP64.
+   *
+   * Escrito a mao em vez de trazer JSZip: sao tres cabecalhos e um CRC32,
+   * e o projeto ja nao tem build -- seria mais um script CDN para
+   * recomprimir algo que ja esta comprimido.
+   *
+   * ZIP64 e obrigatorio porque uma captura em `scale: 2` passa de 4 GB
+   * com poucas paginas, e o `Math.min(0xffffffff, n)` que a versao de 32
+   * bits faria tornaria o offset silenciosamente errado, com o arquivo
+   * abrindo como corrompido em vez de falhar.
+   *
+   * @param {Array<{nome:string, dados:Uint8Array}>} arquivos
+   * @returns {Blob}
+   */
+  _buildZip(arquivos) {
+    const enc = new TextEncoder();
+    // Um unico carimbo de tempo para todos os itens: um arquivo com metadados
+    // por item tem data e hora proprias, e isso nao compra nada aqui.
+    const agora = new Date();
+    const hora = ((agora.getHours() & 0x1f) << 11) | ((agora.getMinutes() & 0x3f) << 5) |
+      ((Math.floor(agora.getSeconds() / 2)) & 0x1f);
+    const data = (((agora.getFullYear() - 1980) & 0x7f) << 9) | (((agora.getMonth() + 1) & 0x0f) << 5) |
+      (agora.getDate() & 0x1f);
+
+    const crcTable = BoardController._crcTable();
+    const crc = (bytes) => {
+      let c = 0xffffffff;
+      for (let i = 0; i < bytes.length; i++) c = crcTable[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+      return (c ^ 0xffffffff) >>> 0;
+    };
+
+    const locais = [];
+    const centrais = [];
+    let offset = 0;
+
+    arquivos.forEach((arq) => {
+      const nome = enc.encode(arq.nome);
+      const dados = arq.dados;
+      const soma = crc(dados);
+
+      const local = new Uint8Array(30 + nome.length);
+      const lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true);   //assinatura de header local
+      lv.setUint16(4, 45, true);           // versao 4.5, obrigatoria p/ ZIP64
+      lv.setUint16(6, 0, true);            // store
+      lv.setUint16(8, 0, true);            // sem horario nem data definedidos
+      lv.setUint16(10, hora, true);
+      lv.setUint16(12, data, true);
+      lv.setUint32(14, soma, true);
+      lv.setUint32(18, dados.length, true);
+      lv.setUint32(22, dados.length, true);
+      lv.setUint16(26, nome.length, true);
+      lv.setUint16(28, 0, true);
+      local.set(nome, 30);
+
+      const central = new Uint8Array(46 + nome.length);
+      const cv = new DataView(central.buffer);
+      cv.setUint32(0, 0x02014b50, true);   // assinatura de header central
+      cv.setUint16(4, 45, true);           // versao que criou o ZIP64
+      cv.setUint16(6, 45, true);           // versao que precisa ler
+      cv.setUint16(8, 0, true);            // flags
+      cv.setUint16(10, 0, true);           // compressao: store
+      cv.setUint16(12, hora, true);
+      cv.setUint16(14, data, true);
+      cv.setUint32(16, soma, true);
+      cv.setUint32(20, dados.length, true);
+      cv.setUint32(24, dados.length, true);
+      cv.setUint16(28, nome.length, true);
+      cv.setUint16(30, 0, true);           // extra field
+      cv.setUint16(32, 0, true);           // comentario
+      cv.setUint16(34, 0, true);           // numero do disco
+      cv.setUint16(36, 0, true);           // atributos internos
+      cv.setUint32(38, 0, true);           // atributos externos
+      // Header central tem 46 bytes de cabecalho: o offset do header local
+      // e o ultimo campo de 4 bytes, e nao o primeiro -- errar para 40
+      // sobrescreve os atributos externos e deixa o offset em zero, o que
+      // abre o arquivo com a primeira entrada valida e todas as demais
+      // apontando para o comeco do zip.
+      cv.setUint32(42, offset, true);
+      central.set(nome, 46);
+
+      locais.push(local, dados);
+      centrais.push(central);
+      offset += local.length + dados.length;
     });
+
+    const tamCentral = centrais.reduce((n, c) => n + c.length, 0);
+    const fim = new Uint8Array(22);
+    const fv = new DataView(fim.buffer);
+    fv.setUint32(0, 0x06054b50, true);     // assinatura de EOCD
+    fv.setUint16(4, 0, true);
+    fv.setUint16(6, 0, true);
+    fv.setUint16(8, arquivos.length, true);
+    fv.setUint16(10, arquivos.length, true);
+    fv.setUint32(12, tamCentral, true);
+    fv.setUint32(16, offset, true);
+
+    const partes = [...locais, ...centrais, fim];
+    const total = partes.reduce((n, p) => n + p.length, 0);
+    const buffer = new Uint8Array(total);
+    let cursor = 0;
+    partes.forEach((p) => { buffer.set(p, cursor); cursor += p.length; });
+    return new Blob([buffer], { type: 'application/zip' });
+  }
+
+  /** Tabela do CRC32 (polinomio 0xEDB88320), montada uma vez e reusada. */
+  static _crcTable() {
+    if (BoardController.__crcTable) return BoardController.__crcTable;
+    const table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      table[i] = c >>> 0;
+    }
+    BoardController.__crcTable = table;
+    return table;
+  }
+
+  /** Converte um `dataURL` de PNG nos bytes que o ZIP store precisa. */
+  _dataURLToBytes(dataURL) {
+    const bin = atob(dataURL.split(',')[1]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  /** Envolve bytes ja crus no Blob do tipo pedido. */
+  _blobFromBytes(bytes, type = 'image/png') {
+    return new Blob([bytes], { type });
+  }
+
+  /** Dispara o download de um Blob e libera a URL depois do clique. */
+  _download(blob, nome) {
+    const link = document.createElement('a');
+    link.download = nome;
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    // Revogar na hora cancelaria o download em alguns navegadores; o
+    // timeout so garante que a URL nao vaza pelo tempo da aba aberta.
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
   }
 
   exportJSON() {
     this._saveCurrentPage();
     const data = { version: 1, pages: this.board.pages, library: this.board.library };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const link = document.createElement('a');
-    link.download = 'lousa-virtual.json';
-    link.href = URL.createObjectURL(blob);
-    link.click();
+    this._download(blob, 'lousa-virtual.json');
     this.showToast('Projeto salvo!');
     this.$.exportModal.classList.add('hidden');
   }

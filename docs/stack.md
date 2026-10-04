@@ -13,13 +13,17 @@ Todas as bibliotecas são carregadas por **CDN** no `index.html` (requer interne
 | **Canvas API** | Desenho livre, borracha, blur, plot de gráficos e bitmaps de alta resolução | `MouseController`, `ObjectController`, `BoardView`, `ImageObject` |
 | **html2canvas** `1.4.1` | Captura da lousa para exportação | `BoardController` (export PDF/PNG) |
 | **jsPDF** `2.5.1` | Geração de PDF | `BoardController` (export PDF) |
+| **ZIP store** (código próprio) | Agrupar as páginas exportadas em PNG num `.zip` | `BoardController` (`_buildZip`) |
 | **localStorage** | Persistência local do projeto | `BoardController` (`lousa-state`) |
 
 ## Bibliotecas do navegador / API
 
 - `katex.render(latex, el, opts)` — renderizar LaTeX em um elemento DOM
-- `html2canvas(elemento, opts)` — gerar imagem/PDF da lousa
-- `window.jspdf.jsPDF` — construir PDF
+- `html2canvas(elemento, opts)` — gerar imagem/PDF da lousa. Aguarda o
+  carregamento das `<img>`, **não** canvases já desenhados
+- `window.jspdf.jsPDF` — construir PDF. `addImage` escreve na folha **atual**:
+  para várias folhas, `addPage` e `addImage` têm de ser intercalados.
+  `compress: true` é obrigatório, senão as imagens vão em RGB cru
 - `CanvasRenderingContext2D` — desenho, blur (pixel a pixel), grade, plot e
   reamostragem de bitmaps
 - `HTMLCanvasElement.toDataURL()` — serialização dos bitmaps em `dataURL`
@@ -35,6 +39,13 @@ Todas as bibliotecas são carregadas por **CDN** no `index.html` (requer interne
   controllers e vice-versa; o `BoardController` conecta ambos na inicialização.
 - **Gráficos** são plotados num `<canvas>` temporário e convertidos para
   `dataURL`, tratados como `ImageObject` de tipo `graph`.
+- **ZIP do export de PNG, escrito à mão** (`BoardController._buildZip`) — PNG não
+  tem páginas, então as N folhas vão num `.zip`. É um ZIP *store* (sem
+  compressão): o conteúdo já é PNG, que é deflate, e recomprimir não ganharia
+  nada. São três cabeçalhos (local, central e EOCD) e um CRC32, o que não
+  justifica um quarto script CDN num projeto sem build — daí a escolha de não
+  trazer o JSZip. `Blob` + `URL.createObjectURL` entregam o arquivo ao
+  download.
 
 ### Nitidez: por que `devicePixelRatio` não basta
 

@@ -93,7 +93,22 @@ na `#sidebar-tab` — e o CSS faz o resto, porque o `transform` da barra e o
 ele vale `calc(var(--sidebar-width) + var(--zoom-margin))` para a página não ficar
 sob a barra, então a segunda classe o devolve a `--zoom-margin`; sem ela sobraria uma
 faixa morta de `--sidebar-width` à esquerda da lousa. A barra não entra em PDF/PNG: o
-`html2canvas` cobre só o `#whiteboard`.
+`html2canvas` cobre só o `#whiteboard`. E o `BoardController._capturePage()` zera o
+`transform: scale(zoom)` da folha durante a captura — sem isso o `html2canvas`
+dimensiona o arquivo pelo retângulo visual, e o export sai com o tamanho e o
+deslocamento da tela em vez do papel (ver "Exportar" em `funcionalidades.md`).
+
+O mesmo vale para as páginas: `#whiteboard` só contém `board.currentPage`, porque
+`_switchPage` faz `clearLayer()` e reconstrói a camada de objetos da página alvo.
+Por isso o export multipágina não é um ajuste de captura, e sim um percurso:
+`BoardController._captureAllPages()` change de página, fotografa e volta para a
+original num `finally`.
+
+`_switchPage` também devolve a Promise do repinte da tinta, herdada de
+`BoardView.drawBackground`. Isso não é detalhe: o `html2canvas` espera as
+`<img>` da camada, mas não espera um canvas já desenhado — lê os pixels quando
+clona o DOM. Quem precisa do sinal (só o export) faz `await`; os demais chamadores
+ignoram o retorno, como já faziam.
 
 ### Camadas da lousa
 

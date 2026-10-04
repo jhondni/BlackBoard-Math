@@ -96,6 +96,59 @@ objeto, sem caso especial.
 - **Exportar** — **PDF**, **PNG** e **Projeto JSON** (modal de exportação). A tinta
   entra no PDF/PNG **acima** dos objetos, porque o canvas de tinta fica na camada
   da frente do whiteboard.
+- **O export sai com todas as páginas, cada uma na sua folha** — o `#whiteboard`
+  só tem a página visível, então o `BoardController` percorre `board.pages` com
+  `_switchPage`, captura cada uma e devolve a página original num `finally`
+  (o zoom, a orientação e a transição do CSS voltam junto). O **PDF** sai com uma
+  folha por página, cada uma na orientação da sua página de origem — um projeto
+  pode misturar retrato e paisagem no mesmo arquivo. Como PNG não tem páginas, o
+  botão PNG baixa um **`.zip` com um PNG por página** (`pagina-1.png`,
+  `pagina-2.png`, …), cada um com a proporção e a orientação da sua página; um
+  projeto de página única baixa o PNG solto, sem envelope. O ZIP é *store*, sem
+  compressão: o conteúdo já é PNG, que é deflate, e recomprimir não ganharia nada.
+  A selagem é feita à mão (três cabeçalhos e um CRC32) em vez de trazer JSZip, para
+  não somar mais um script CDN a um projeto sem build. Falha em qualquer uma das
+  capturas avisa "Não foi possível exportar" e fecha o modal, em vez de deixá-lo
+  aberto para sempre.
+- **A transição da folha é desligada durante o export** — 0,4 s de transição de
+  largura/altura no CSS fariam a captura pegar a folha no meio da troca de
+  orientação; desligada, 8 páginas alternando orientação caem de 7,4 s para 4,6 s.
+- **A tinta entra no export, e isso exige esperar o repinte** — o `html2canvas`
+  espera o carregamento das `<img>` da camada, mas **não** espera um canvas que já
+  foi desenhado: ele lê os pixels no instante em que clona o DOM, e o
+  `BoardView.drawBackground` só pinta depois do `img.onload`. Numa página que só
+  tinha rabisco, medido: **0 px** sem espera, **161.364 px** com um
+  `requestAnimationFrame`, **242.398 px** com 50 ms — o ponto de virada cai
+  *dentro* da janela de um frame, então esperar um frame é meio cara de moeda e as
+  primeiras folhas saíam em branco conforme o agendamento da máquina. Por isso
+  `drawBackground` devolve uma Promise (resolve no `onload`, e também no `onerror`,
+  para um `drawingData` corrompido não pendurar o export) e `_switchPage` a
+  repassa; o export faz `await` em vez de um timeout. Equações, gráficos e imagens
+  não têm essa corrida e não esperam nada.
+- **`addPage` e `addImage` são intercalados** — o `addImage` do jsPDF escreve na
+  folha **atual**, e só o `addPage` avança a folha. Criar as N folhas primeiro e
+  só depois gravar as imagens empilha todas em `0,0` na última: a primeira página
+  saía em branco e as demais mostravam a última por cima. O PDF agora grava a
+  imagem de cada página logo depois de criar a folha dela.
+- **O PDF é comprimido** — `compress: true` não é opcional: o jsPDF grava as
+  imagens **sem compressão** por padrão, ou seja, o RGB cru (10,7 MB por página A4
+  em 2×) mais uma cópia em escala de cinza do canal alfa, que o `toDataURL` sempre
+  emite e que aqui é inteiramente opaco. Medido em 4 páginas: **54,4 MB sem,
+  0,08 MB com** — e sem perda de qualidade, porque é Flate. Sem isso um projeto de
+  30 páginas passaria de 500 MB e o navegador recusa a abrir.
+- **O export sai com a proporção do papel, não da tela** — o `html2canvas` mede a
+  captura por `getBoundingClientRect()`, que já inclui o `transform: scale(zoom)`
+  do whiteboard e o scroll da `#workspace`. O arquivo saía com o tamanho da tela
+  (794 px × zoom) e com o conteúdo escalado e deslocado dentro dele — em 200%, só
+  1 de 9 pontos de referência de uma página aparecia no lugar. O `BoardController`
+  zera o transform durante a captura (`try/finally`, o zoom volta mesmo se a captura
+  falhar) e deriva as medidas do PDF da própria imagem. O PNG é sempre 2× a página
+  (1588×2246 retrato, 2246×1588 paisagem), qualquer que seja o zoom na tela.
+- **O PDF sai em A4 real** — o papel é a própria imagem convertida com 72/96, e não
+  um formato escolhido à mão: retrato 595,5 × 842,25 pt (21,0 × 29,7 cm), paisagem
+  842,25 × 595,5 pt. Com `unit: 'px'` o jsPDF multiplica por 96/72 em vez de 72/96 e
+  a folha sai 1,78× maior, com o A4 virando 52,8 × 37,3 cm — a proporção continuava
+  certa, o tamanho não.
 - **Importar** projeto JSON (arquivo ou drag & drop).
 - **Tinta no projeto JSON** — a tinta viaja em `page.drawingData` (PNG com alfa) e
   não no objeto, então nunca há traço órfão; a miniatura da página mostra só esse

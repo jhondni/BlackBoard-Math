@@ -381,21 +381,42 @@ export class BoardView {
   /**
    * Desenha uma imagem de dados no canvas de desenho, preenchendo
    * todo o backing store (qualquer que seja a sua densidade).
+   *
+   * Devolve uma Promise que resolve quando o canvas ja esta pintado.
+   * Isso nao e teorico: o `html2canvas` espera o carregamento das `<img>`
+   * da camada, mas nao espera um canvas que ja foi desenhado -- ele le
+   * os pixels no momento em que clona o DOM. Medido com uma pagina que so
+   * tinha tinta: 0 px na captura sem espera, 161.364 px com um
+   * `requestAnimationFrame` de espera, 242.398 px com 50 ms. O ponto de
+   * virada cai dentro da janela de um frame, entao "esperar um frame" e
+   * meio cara de moeda. Quem precisa do sinal -- hoje so o export
+   * multipagina -- awaits esta Promise; os outros chamadores podem
+   * ignorar, como ja faziam.
+   *
+   * Tambem resolve em caso de erro: um `drawingData` corrompido nao pode
+   * deixar o export pendurado para sempre esperando uma imagem que nunca
+   * carrega.
+   *
    * @param {string} dataURL
+   * @returns {Promise<void>}
    */
   drawBackground(dataURL) {
     const ctx = this.canvas.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    if (!dataURL) return;
-    const img = new Image();
-    img.onload = () => {
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
-    };
-    img.src = dataURL;
+    if (!dataURL) return Promise.resolve();
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = dataURL;
+    });
   }
 
   /**
