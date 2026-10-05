@@ -38,6 +38,7 @@ export class ToolbarView {
     this.onToggleDark = null;
     this.onToggleLandscape = null;
     this.onHelp = null;
+    this.onImport = null;
     this.onExport = null;
   }
 
@@ -73,6 +74,7 @@ export class ToolbarView {
     if (this.$.darkModeBtn) this.$.darkModeBtn.addEventListener('click', () => this.onToggleDark && this.onToggleDark());
     if (this.$.landscapeBtn) this.$.landscapeBtn.addEventListener('click', () => this.onToggleLandscape && this.onToggleLandscape());
     if (this.$.helpBtn) this.$.helpBtn.addEventListener('click', () => this.onHelp && this.onHelp());
+    if (this.$.importBtn) this.$.importBtn.addEventListener('click', () => this.onImport && this.onImport());
     if (this.$.exportBtn) this.$.exportBtn.addEventListener('click', () => this.onExport && this.onExport());
   }
 

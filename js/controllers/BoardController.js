@@ -19,6 +19,16 @@ export class BoardController {
   static EXPORT_SCALE = 2;
 
   /**
+   * Formato do arquivo de projeto (`.json`) gravado por `exportJSON`.
+   *
+   * O mesmo numero vai no `version` que o export escreve e no limite que o
+   * import aceita, entao os dois lados nao podem divergir: um projeto
+   * gravado por uma versao mais nova do programa e recusado com aviso,
+   * em vez de abrir pela metade e perder as paginas que ela nao conhecesse.
+   */
+  static PROJECT_VERSION = 1;
+
+  /**
    * Pontos PDF por pixel CSS. O PDF e medido em `pt` (1/72") e o browser
    * em px (1/96"), entao 1 px = 72/96 = 0,75 pt. Deixar o jsPDF em
    * `unit: 'px'` faz o contrario -- ele multiplica por 96/72 = 4/3 -- e a
@@ -54,6 +64,7 @@ export class BoardController {
     this._bindViews();
     this._setupZoomWheel();
     this._setupExport();
+    this._setupImport();
     this._setupImageUpload();
     this._setupDragDrop();
 
@@ -80,6 +91,7 @@ export class BoardController {
     this.toolbar.onToggleLibrary = () => this.toggleLibrary(this.$.librarySidebar.classList.contains('hidden'));
     this.toolbar.onCloseLibrary = () => this.toggleLibrary(false);
     this.toolbar.onHelp = () => this.openHelp();
+    this.toolbar.onImport = () => this.$.jsonUpload.click();
     this.toolbar.onExport = () => this.openExport();
 
     // Barra de paginas recolhida. Estado de UI, nao de documento: a
@@ -593,10 +605,17 @@ _switchPage(index) {
     this.$.exportPdfBtn.addEventListener('click', () => this.exportPDF());
     this.$.exportPngBtn.addEventListener('click', () => this.exportPNG());
     this.$.exportJsonBtn.addEventListener('click', () => this.exportJSON());
+  }
+
+  /* ---- Import ---- */
+  _setupImport() {
     this.$.jsonUpload.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) this.importJSON(file);
+      const file = e.target.files && e.target.files[0];
+      // Zerar o `value` depois de ler o arquivo: sem isso, escolher o
+      // MESMO `.json` duas vezes seguidas nao dispara `change` e o
+      // segundo projeto parece nao ter aberto.
       e.target.value = '';
+      if (file) this.importJSON(file);
     });
   }
 
@@ -947,32 +966,128 @@ async _captureAllPages() {
 
   exportJSON() {
     this._saveCurrentPage();
-    const data = { version: 1, pages: this.board.pages, library: this.board.library };
+    const data = {
+      version: BoardController.PROJECT_VERSION,
+      pages: this.board.pages,
+      library: this.board.library
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     this._download(blob, 'lousa-virtual.json');
     this.showToast('Projeto salvo!');
     this.$.exportModal.classList.add('hidden');
   }
 
+  /**
+   * Abre um projeto `.json` exportado pela propria lousa.
+   *
+   * O arquivo substitui `board.pages` e `board.library` inteiras, e o
+   * estado novo vai para o `localStorage` no `_switchPage` seguinte: o
+   * trabalho em aberto some sem volta. Por isso a troca e confirmada.
+   * A confirmacao mora aqui, e nao no botao, para valer tambem para o
+   * arrasto-e-solta -- que tambem substituia a lousa, em silencio.
+   *
+   * @param {File} file
+   */
   importJSON(file) {
     const reader = new FileReader();
+    reader.onerror = () => this.showToast('Nao foi possivel ler o arquivo');
     reader.onload = (e) => {
+      let data;
       try {
-        const data = JSON.parse(e.target.result);
-        if (data.pages) {
-          this.board.pages = data.pages;
-          this.board.library = data.library || [];
-          this.board.currentPageIndex = 0;
-          this.renderPagesList();
-          this.renderLibrary();
-          this._switchPage(0);
-          this.showToast('Projeto carregado!');
-        }
+        data = JSON.parse(e.target.result);
       } catch {
         this.showToast('Arquivo invalido');
+        return;
       }
+
+      const motivo = this._projectError(data);
+      if (motivo) {
+        this.showToast(motivo);
+        return;
+      }
+
+      const total = data.pages.length;
+      const aviso = 'Abrir "' + file.name + '" (' + (total === 1 ? '1 pagina' : total + ' paginas') + ')?'
+        + '\n\nA lousa atual sera substituida e nao podera ser recuperada.';
+      if (!window.confirm(aviso)) return;
+
+      this._openProject(data);
+      this.showToast('Projeto carregado: ' + total + (total === 1 ? ' pagina' : ' paginas'));
     };
     reader.readAsText(file);
+  }
+
+  /**
+   * Confere se o JSON tem o formato de um projeto da lousa.
+   *
+   * O `accept` do input e um filtro de conveniencia para quem escolhe o
+   * arquivo, nao uma garantia -- o arrasto-e-solta traz o que vier -- e o
+   * `JSON.parse` aceita qualquer objeto. Sem esta checagem, um `.json`
+   * valido e estraneo (o `package.json` de outro projeto, por exemplo)
+   * era aceito em silencio e deixava a lousa vazia, sem aviso nenhum.
+   *
+   * @param {*} data
+   * @returns {string|null} motivo da recusa, ou null se pode abrir
+   */
+  _projectError(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data))
+      return 'Arquivo invalido';
+    if (typeof data.version === 'number' && data.version > BoardController.PROJECT_VERSION)
+      return 'Projeto de versao mais nova que este programa';
+    if (!Array.isArray(data.pages) || data.pages.length === 0)
+      return 'O arquivo nao e um projeto da lousa';
+    return null;
+  }
+
+  /**
+   * Troca a lousa atual pelo projeto lido do arquivo.
+   *
+   * O `currentPageIndex = -1` antes do `_switchPage` e o que impede a
+   * pagina importada de ser sobrescrita: `_switchPage` comeca salvando a
+   * pagina corrente, e `board.currentPage` com indice -1 e null, entao
+   * essa gravacao nao acontece. Sem ele, o `_saveCurrentPage` serializava
+   * a tinta e os objetos da lousa ANTIGA por cima da pagina 1 recem
+   * lida -- o projeto abria mostrando o conteudo que estava na tela.
+   *
+   * @param {{pages: Array<object>, library?: Array<object>}} data
+   */
+  _openProject(data) {
+    this.board.pages = data.pages.map((page, i) => this._normalizePage(page, i));
+    this.board.library = Array.isArray(data.library) ? data.library : [];
+    this.board.currentPageIndex = -1;
+    this.renderLibrary();
+    this._switchPage(0);
+  }
+
+  /**
+   * Completa uma pagina vinda do arquivo.
+   *
+   * O `_switchPage` le `page.elements` e `page.orientation` sem guarda, e
+   * o `drawBackground` espera um `dataURL` (o `null` e tratado). Uma
+   * pagina sem esses campos -- de um arquivo editado a mao, ou de um
+   * export anterior a algum campo existir -- lancaria dentro da troca de
+   * pagina e deixaria a lousa pela metade. Pagina que nem for objeto e
+   * descartada e devolvida como vazia, para o arquivo inteiro continuar
+   * abrindo.
+   *
+   * @param {*} page
+   * @param {number} index
+   * @returns {object}
+   */
+  _normalizePage(page, index) {
+    const base = page && typeof page === 'object' && !Array.isArray(page) ? page : {};
+    const elements = Array.isArray(base.elements)
+      ? base.elements.filter(el => el && typeof el === 'object')
+      : [];
+    return {
+      ...base,
+      name: typeof base.name === 'string' ? base.name : `Pagina ${index + 1}`,
+      drawingData: typeof base.drawingData === 'string' ? base.drawingData : null,
+      elements,
+      // `objects` e o mesmo array de `elements`, como em `_saveCurrentPage`.
+      objects: elements,
+      orientation: base.orientation === 'landscape' ? 'landscape' : 'portrait'
+    };
   }
 
   /* ---- Upload de imagem ---- */

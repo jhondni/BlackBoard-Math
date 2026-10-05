@@ -43,6 +43,7 @@ import { MouseController } from './controllers/MouseController.js';
     darkModeBtn: byId('dark-mode-btn'),
     landscapeBtn: byId('landscape-btn'),
     helpBtn: byId('help-btn'),
+    importBtn: byId('import-btn'),
     exportBtn: byId('export-btn'),
     zoomInBtn: byId('zoom-in-btn'),
     zoomOutBtn: byId('zoom-out-btn'),
