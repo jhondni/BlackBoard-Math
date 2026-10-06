@@ -138,6 +138,25 @@ export class UIPropertiesView {
       this.body.appendChild(this._group('Forma', paint));
     }
 
+    if (node.type === 'image') {
+      // O ajuste e o `preserveAspectRatio` do SVG: o navegador decide
+      // como o bitmap cabe na caixa. "Caber" preserva a proporcao (com
+      // sobra dos dois lados), "Cobrir" preenche a caixa cortando o
+      // excedente, "Esticar" preenche distorcendo. Os tres sao um
+      // atributo, e nao uma conta de proporcao na view.
+      const natural = node.naturalWidth && node.naturalHeight
+        ? node.naturalWidth + ' x ' + node.naturalHeight + ' px'
+        : 'desconhecida';
+      this.body.appendChild(this._group('Imagem', [
+        this._select(node.fit, 'fit', 'Ajuste', [
+          { value: 'meet', label: 'Caber' },
+          { value: 'slice', label: 'Cobrir' },
+          { value: 'none', label: 'Estirar' }
+        ]),
+        this._hint('Tamanho original: ' + natural)
+      ]));
+    }
+
     if (node.type === 'text') {
       this.body.appendChild(this._group('Conteudo', [
         this._textarea(node.text, 'text', 'Texto')

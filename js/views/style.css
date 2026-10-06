@@ -1537,7 +1537,8 @@ body.design-mode #sidebar-tab { display: none; }
 #design-svg[data-tool="rect"],
 #design-svg[data-tool="ellipse"],
 #design-svg[data-tool="line"],
-#design-svg[data-tool="text"] { cursor: crosshair; }
+#design-svg[data-tool="text"],
+#design-svg[data-tool="image"] { cursor: crosshair; }
 #design-svg[data-tool="select"] { cursor: default; }
 #design-svg.is-panning { cursor: grab; }
 

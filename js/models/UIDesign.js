@@ -1,5 +1,6 @@
 import { UINode } from './UINode.js';
 import { UIFrame } from './UIFrame.js';
+import { UIImage } from './UIImage.js';
 import { UIShape } from './UIShape.js';
 import { UIText } from './UIText.js';
 
@@ -97,6 +98,7 @@ export class UIDesign {
 
   static buildNode(type, props = {}) {
     if (type === 'frame') return new UIFrame(props);
+    if (type === 'image') return new UIImage(props);
     if (type === 'text') return new UIText(props);
     if (type === 'rect' || type === 'ellipse' || type === 'line') {
       return new UIShape({ ...props, shapeType: type });
@@ -108,6 +110,7 @@ export class UIDesign {
   /** Prefixo do nome automatico, conforme a ferramenta. */
   static labelFor(type, props = {}) {
     if (type === 'frame') return 'Frame';
+    if (type === 'image') return 'Imagem';
     if (type === 'text') return 'Texto';
     if (type === 'shape') return UIShape.labelFor(props.shapeType);
     return UIShape.labelFor(type);
@@ -388,6 +391,7 @@ export class UIDesign {
         return;
       }
       if (item.type === 'frame') this.nodes.push(UIFrame.fromJSON(item));
+      else if (item.type === 'image') this.nodes.push(UIImage.fromJSON(item));
       else if (item.type === 'shape') this.nodes.push(UIShape.fromJSON(item));
       else if (item.type === 'text') this.nodes.push(UIText.fromJSON(item));
       else skipped += 1;

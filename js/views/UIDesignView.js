@@ -52,8 +52,16 @@ const DEFAULT_SIZE = {
   rect: { width: 120, height: 80 },
   ellipse: { width: 120, height: 80 },
   line: { width: 120, height: 0 },
-  text: { width: 160, height: 0 }
+  text: { width: 160, height: 0 },
+  // So o clique solto usa isso. A imagem nasce da caixa arrastada; se o
+  // arquivo for menor que 240x160, esse tamanho distorceria a proporcao
+  // de um jeito que o usuario nao pediu, entao o clique solto respeita a
+  // medida natural -- trocada pelo controller em `setImageNaturalSize`.
+  image: { width: 240, height: 160 }
 };
+
+/** Lado maximo da imagem que nasce de um clique solto. */
+const MAX_NATURAL_SIZE = 480;
 
 /** Cria um elemento SVG ja com os atributos. */
 function el(tag, attrs = {}, className = '') {
@@ -87,6 +95,7 @@ export class UIDesignView {
     this.currentTool = 'select';
     this.gesture = null;
     this.spaceDown = false;
+    this.imageNaturalSize = null;   // medida do arquivo, para o clique solto
 
     // Callbacks injetados pelo UIDesignController.
     this.onCreateNode = null;      // (tool, props) => void
@@ -160,6 +169,28 @@ export class UIDesignView {
   setTool(tool) {
     this.currentTool = tool;
     if (this.svg) this.svg.setAttribute('data-tool', tool);
+  }
+
+  /**
+   * Medida natural do arquivo escolhido, para o clique solto criar a
+   * imagem no tamanho dela. Sem isso, um icone de 32x32 nasceria dentro
+   * de uma caixa de 240x160 -- esticado ou com borda vazia, nenhum dos
+   * dois pedido pelo usuario.
+   */
+  setImageNaturalSize(width, height) {
+    const w = Number(width) > 0 ? Number(width) : 0;
+    const h = Number(height) > 0 ? Number(height) : 0;
+    if (!w || !h) {
+      this.imageNaturalSize = null;
+      return;
+    }
+    // A medida natural entra inteira, cabendo em MAX_NATURAL_SIZE e sem
+    // esticar nenhum dos lados.
+    const k = Math.min(1, MAX_NATURAL_SIZE / Math.max(w, h));
+    this.imageNaturalSize = {
+      width: Math.max(1, Math.round(w * k)),
+      height: Math.max(1, Math.round(h * k))
+    };
   }
 
   /** Segurar espaco e o gesto de "mao": arrastar o conteudo. */
@@ -295,9 +326,34 @@ export class UIDesignView {
 
     if (node.type === 'shape') this._buildShape(g, node);
 
+    if (node.type === 'image') this._buildImage(g, node);
+
     if (node.type === 'text') this._buildText(g, node);
 
     return g;
+  }
+
+  _buildImage(g, node) {
+    // O no e a caixa; quem decide como o bitmap cabe nela e o
+    // `preserveAspectRatio`. Por isso nao ha conta de proporcao aqui: o
+    // navegador ja faz, e e o unico que sabe a medida real do arquivo.
+    if (!node.isEmpty) {
+      g.appendChild(el('image', {
+        x: n(node.x), y: n(node.y), width: n(node.width), height: n(node.height),
+        preserveAspectRatio: node.preserveAspectRatio,
+        href: node.src
+      }, 'design-image'));
+      return;
+    }
+
+    // Imagem sem `src` -- um arquivo aberto sem a imagem, ou um node
+    // apagado no editor. Fica a caixa tracejada, para nao parecer que o
+    // desenho sumiu.
+    const box = el('rect', {
+      x: n(node.x), y: n(node.y), width: n(node.width), height: n(node.height),
+      fill: 'none', stroke: '#b9b9c6', 'stroke-width': 1, 'stroke-dasharray': '6 4'
+    }, 'design-image-missing');
+    g.appendChild(box);
   }
 
   _buildShape(g, node) {
@@ -861,7 +917,9 @@ export class UIDesignView {
       && Math.hypot(to.x - from.x, to.y - from.y) > MIN_DRAG_PX;
 
     if (!dragged) {
-      const size = DEFAULT_SIZE[gesture.tool] || { width: 120, height: 80 };
+      const size = gesture.tool === 'image' && this.imageNaturalSize
+        ? this.imageNaturalSize
+        : (DEFAULT_SIZE[gesture.tool] || { width: 120, height: 80 });
       return { x: gesture.start.x, y: gesture.start.y, width: size.width, height: size.height };
     }
 

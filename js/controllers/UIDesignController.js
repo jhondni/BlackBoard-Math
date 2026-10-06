@@ -46,7 +46,7 @@ const DIRECT_PROPS = [
   'fontSize', 'fontFamily', 'color', 'align', 'lineHeight'
 ];
 
-const TOOL_KEYS = { v: 'select', f: 'frame', r: 'rect', o: 'ellipse', l: 'line', t: 'text' };
+const TOOL_KEYS = { v: 'select', f: 'frame', r: 'rect', o: 'ellipse', l: 'line', t: 'text', i: 'image' };
 
 export class UIDesignController {
   constructor(design, views, $) {
@@ -54,6 +54,11 @@ export class UIDesignController {
     this.views = views || {};
     this.$ = $ || {};
     this.active = false;
+    // Arquivo escolhido e ainda nao colocado no canvas: data URL e medida
+    // original. Vive no controller porque escolher o arquivo e uma acao de
+    // ferramenta, nao um estado do design (o arquivo so passa a existir no
+    // design quando a caixa e arrastada).
+    this.pendingImage = null;
   }
 
   /**
@@ -77,6 +82,28 @@ export class UIDesignController {
 
     if (designView) {
       designView.onCreateNode = (tool, props) => {
+        // A ferramenta Imagem fica armada esperando o arquivo; se a
+        // ferramenta virou outra coisa no meio, nao ha imagem para criar e
+        // o arrasto foi de outra coisa. Sem `src` a imagem entraria como
+        // caixa tracejada, que e estado invalido, nao um erro a favor do
+        // usuario.
+        if (tool === 'image') {
+          const pending = this.pendingImage;
+          this._discardPendingImage();
+          if (!pending) {
+            this.setTool('select');
+            this._toast('Escolha um arquivo de imagem antes de arrastar a caixa', true);
+            this.render();
+            return;
+          }
+          props = {
+            ...props,
+            src: pending.src,
+            naturalWidth: pending.naturalWidth,
+            naturalHeight: pending.naturalHeight
+          };
+        }
+
         const node = this.design.createNode(tool, props);
         this.design.selectNode(node);
         // Criar e um comando de uma vez so: depois que o node nasce, a
@@ -148,8 +175,78 @@ export class UIDesignController {
 
   setTool(tool, btn) {
     const { toolbar, designView } = this.views;
+
+    // Imagem e a unica ferramenta que nao se arma: ela precisa de um
+    // arquivo antes de existir. Escolher a ferramenta abre o seletor; so
+    // depois que o arquivo carrega e que o arrasto da caixa vale. E o
+    // que a lousa faz com o mesmo botao.
+    if (tool === 'image') {
+      this.pickImage();
+      return;
+    }
+
+    this._discardPendingImage();
     if (toolbar) toolbar.setTool(tool, btn);
     if (designView) designView.setTool(tool);
+  }
+
+  /* ---- Imagem ---- */
+
+  /**
+   * Escolhe um arquivo de imagem e o guarda para a proxima caixa. O
+   * arquivo vira data URL: e o que faz o `.uidesign.json` valer sozinho,
+   * sem uma pasta de imagens do lado. O input e criado aqui, e nao
+   * reaproveitado do `#image-upload` da lousa, porque aquele input tem
+   * um dono so e os dois modulos estao na mesma pagina.
+   */
+  pickImage() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onerror = () => this._toast('Nao foi possivel ler a imagem', true);
+      reader.onload = (e) => this._armImage(String(e.target.result));
+      reader.readAsDataURL(file);
+    });
+
+    input.click();
+  }
+
+  /**
+   * O arquivo virou data URL; falta saber o tamanho original, porque o
+   * `<image>` do SVG nao tem `naturalWidth` como o `<img>` do HTML. Um
+   * `Image` solto, so para ler a medida e jogar fora.
+   */
+  _armImage(src) {
+    const probe = new Image();
+    probe.onerror = () => {
+      this._toast('O navegador nao conseguiu abrir essa imagem', true);
+      this._discardPendingImage();
+    };
+    probe.onload = () => {
+      this.pendingImage = {
+        src,
+        naturalWidth: probe.naturalWidth || 0,
+        naturalHeight: probe.naturalHeight || 0
+      };
+
+      const { toolbar, designView } = this.views;
+      if (designView) designView.setImageNaturalSize(probe.naturalWidth, probe.naturalHeight);
+      if (toolbar) toolbar.setTool('image');
+      if (designView) designView.setTool('image');
+      this._toast('Arraste a caixa onde a imagem vai entrar');
+    };
+    probe.src = src;
+  }
+
+  _discardPendingImage() {
+    this.pendingImage = null;
+    const { designView } = this.views;
+    if (designView) designView.setImageNaturalSize(0, 0);
   }
 
   /* ---- Propriedades ---- */
@@ -171,6 +268,8 @@ export class UIDesignController {
       node.setText(value);
     } else if (prop === 'shapeType' && node.type === 'shape') {
       node.setShapeType(value);
+    } else if (prop === 'fit' && node.type === 'image') {
+      node.setFit(value);
     } else if (UIShape.CORNERS.includes(prop) && node.type === 'shape') {
       const index = UIShape.CORNERS.indexOf(prop);
       node.setRadius(prop, value);
@@ -259,13 +358,16 @@ export class UIDesignController {
   /* ---- Teclado ----
      O `ToolController` da lousa tambem escuta `keydown` no
      `document`, e os dois hears receberiam a mesma tecla:
-     `D` viraria caneta enquanto se cria um frame. Por isso o
-     listener daqui e de captura e chama
-     `stopImmediatePropagation`: ele roda antes do da lousa e
-     impede que a outra camada veja a tecla. E o `ToolController`
-     tambem pergunta por `isUXDesignActive()` antes de agir,
-     para as teclas que aqui nao sao tratadas (`E`, `G`, `+`)
-     nao abrirem os modais da lousa por cima do modo Design. */
+      `D` viraria caneta enquanto se cria um frame. Por isso o
+      listener daqui e de captura e chama
+      `stopImmediatePropagation`: ele roda antes do da lousa e
+      impede que a outra camada veja a tecla. Vale tambem para a
+      `I`, que os dois modulos usam para Imagem: sem isto, escolher
+      uma imagem aqui abriria o seletor duas vezes -- uma por
+      modulo. E o `ToolController` tambem pergunta por
+      `isUXDesignActive()` antes de agir,
+      para as teclas que aqui nao sao tratadas (`E`, `G`, `+`)
+      nao abrirem os modais da lousa por cima do modo Design. */
 
   _bindKeys() {
     document.addEventListener('keydown', (e) => this._onKeyDown(e), true);
@@ -292,7 +394,18 @@ export class UIDesignController {
     let handled = true;
 
     if (key === 'delete' || key === 'backspace') this.removeSelected();
-    else if (key === 'escape') { this.design.deselectAll(); this.render(); }
+    // Escape cancela a imagem armada antes de qualquer outra coisa: sem
+    // isso o arquivo ficaria esperando o proximo arrasto, em qualquer
+    // canto do canvas, muito depois de o usuario ter desistido.
+    else if (key === 'escape') {
+      if (this.pendingImage) {
+        this._discardPendingImage();
+        this.setTool('select');
+      } else {
+        this.design.deselectAll();
+      }
+      this.render();
+    }
     else if (key.indexOf('arrow') === 0) this._nudge(key, e);
     else if (TOOL_KEYS[key] && !e.ctrlKey && !e.metaKey) this.setTool(TOOL_KEYS[key]);
     else handled = false;

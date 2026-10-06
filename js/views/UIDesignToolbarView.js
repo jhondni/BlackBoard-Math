@@ -19,6 +19,9 @@ const ICONS = {
   ellipse: '<ellipse cx="12" cy="12" rx="8" ry="6" fill="currentColor"/>',
   line: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 19L19 5"/>',
   text: '<path fill="currentColor" d="M5 4v3h5.5v12h3V7H19V4H5z"/>',
+  // Montura com o horizonte e o sol: e o que distingue "imagem" de
+  // "retangulo", que ja tem icone proprio e e a mesma coisa sem o miolo.
+  image: '<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="10" r="1.5" fill="currentColor"/><path fill="currentColor" d="M4.5 18l5-5.5 4 4 2.5-2.5 3.5 4z"/>',
   grid: '<path fill="none" stroke="currentColor" stroke-width="1.6" d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   guides: '<path fill="none" stroke="currentColor" stroke-width="1.6" d="M12 3v18"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/>',
   snap: '<path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M5 4v8a7 7 0 0014 0V4M12 12v8"/>',
@@ -44,7 +47,8 @@ export class UIDesignToolbarView {
       'dtool-rect': 'rect',
       'dtool-ellipse': 'ellipse',
       'dtool-line': 'line',
-      'dtool-text': 'text'
+      'dtool-text': 'text',
+      'dtool-image': 'image'
     };
 
     this.onToolSelected = null;   // (tool, btn) => void
@@ -70,7 +74,8 @@ export class UIDesignToolbarView {
       this._toolButton('dtool-rect', 'rect', 'Retangulo (R)'),
       this._toolButton('dtool-ellipse', 'ellipse', 'Elipse (O)'),
       this._toolButton('dtool-line', 'line', 'Linha (L)'),
-      this._toolButton('dtool-text', 'text', 'Texto (T)')
+      this._toolButton('dtool-text', 'text', 'Texto (T)'),
+      this._toolButton('dtool-image', 'image', 'Imagem (I)')
     ]));
 
     bar.appendChild(this._separator());
