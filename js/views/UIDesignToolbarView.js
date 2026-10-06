@@ -59,6 +59,8 @@ export class UIDesignToolbarView {
     this.onSave = null;
     this.onLoad = null;
     this.onExportSVG = null;
+    this.onWorkspaceChange = null; // (workspace) => void
+    this.workspace = 'canvas';
   }
 
   init() {
@@ -68,7 +70,27 @@ export class UIDesignToolbarView {
     bar.textContent = '';
     bar.classList.add('design-toolbar');
 
-    bar.appendChild(this._group([
+    // A aba vem primeiro e fora de qualquer grupo de ferramenta: e o que
+    // troca o que a barra inteira significa, nao uma ferramenta entre
+    // outras. Fica na esquerda, como as abas Canvas/Code do Figma.
+    const abas = document.createElement('div');
+    abas.className = 'design-tabs';
+    abas.setAttribute('role', 'tablist');
+    abas.appendChild(this._tabButton('dtab-canvas', 'canvas', 'Canvas'));
+    abas.appendChild(this._tabButton('dtab-code', 'code', 'Codigo'));
+    bar.appendChild(abas);
+
+    bar.appendChild(this._separator());
+
+    // Tudo que so faz sentido com o canvas visivel fica num agrupador
+    // proprio: na aba Codigo ele some, em vez de aceitar clique em uma
+    // ferramenta que nao tem onde desenhar.
+    this.canvasOnly = document.createElement('div');
+    this.canvasOnly.className = 'design-toolbar-canvas-only';
+    bar.appendChild(this.canvasOnly);
+
+    const canvas = this.canvasOnly;
+    canvas.appendChild(this._group([
       this._toolButton('dtool-select', 'select', 'Selecionar (V)'),
       this._toolButton('dtool-frame', 'frame', 'Frame (F)'),
       this._toolButton('dtool-rect', 'rect', 'Retangulo (R)'),
@@ -78,24 +100,24 @@ export class UIDesignToolbarView {
       this._toolButton('dtool-image', 'image', 'Imagem (I)')
     ]));
 
-    bar.appendChild(this._separator());
+    canvas.appendChild(this._separator());
 
-    bar.appendChild(this._group([
+    canvas.appendChild(this._group([
       this._toggleButton('dtool-grid', 'grid', 'Grade'),
       this._toggleButton('dtool-guides', 'guides', 'Guias'),
       this._toggleButton('dtool-snap', 'snap', 'Encaixe')
     ]));
 
-    bar.appendChild(this._separator());
+    canvas.appendChild(this._separator());
 
     this.zoomLabel = this._element('span', 'design-zoom-label');
-    bar.appendChild(this._group([
+    canvas.appendChild(this._group([
       this._button('dtool-zoom-out', 'minus', 'Reduzir zoom', () => this.onZoomChange && this.onZoomChange(-0.1)),
       this.zoomLabel,
       this._button('dtool-zoom-in', 'plus', 'Aumentar zoom', () => this.onZoomChange && this.onZoomChange(0.1))
     ]));
 
-    bar.appendChild(this._separator());
+    canvas.appendChild(this._separator());
 
     bar.appendChild(this._group([
       this._button('dtool-save', 'save', 'Salvar .uidesign.json', () => this.onSave && this.onSave(), 'Salvar'),
@@ -106,6 +128,9 @@ export class UIDesignToolbarView {
     this.setTool(this.currentTool);
     this.syncToggles();
     this.setZoom(this.design.zoom);
+    // No fim: `setWorkspace` marca as abas, e as abas so existem depois
+    // que foram anexadas.
+    this.setWorkspace(this.workspace);
     return true;
   }
 
@@ -158,6 +183,41 @@ export class UIDesignToolbarView {
     });
     btn.dataset.tool = tool;
     return btn;
+  }
+
+  _tabButton(id, workspace, title) {
+    const btn = this._element('button', 'design-tab');
+    btn.id = id;
+    btn.type = 'button';
+    btn.title = title;
+    btn.dataset.workspace = workspace;
+    btn.setAttribute('role', 'tab');
+    btn.textContent = title;
+    btn.addEventListener('click', () => this.setWorkspace(workspace, btn));
+    return btn;
+  }
+
+  /**
+   * Troca entre o canvas e a aba de codigo. O agrupador das ferramentas
+   * e escondido por CSS na aba Codigo -- e o que impede que a pessoa
+   * clique em Retangulo e nao aconteca nada.
+   */
+  setWorkspace(workspace, btn) {
+    const next = workspace === 'code' ? 'code' : 'canvas';
+    const mudou = next !== this.workspace;
+    this.workspace = next;
+    const bar = this.$.designToolbar;
+    if (bar) {
+      bar.classList.toggle('is-code', next === 'code');
+      bar.querySelectorAll('.design-tab').forEach((tab) => {
+        const on = tab.dataset.workspace === next;
+        tab.classList.toggle('is-active', on);
+        tab.setAttribute('aria-selected', String(on));
+      });
+    }
+    // So avisa quando mudou de verdade: o `init()` passa por aqui para
+    // marcar a aba inicial, e nao e uma troca de workspace.
+    if (mudou && this.onWorkspaceChange) this.onWorkspaceChange(next);
   }
 
   _toggleButton(id, icon, label) {

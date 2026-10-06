@@ -65,7 +65,7 @@ export class UIDesignController {
    * @returns {UIDesignController} this, para encadear na montagem.
    */
   init() {
-    const { toolbar, designView, layers, properties } = this.views;
+    const { toolbar, designView, layers, properties, code } = this.views;
 
     if (toolbar) {
       toolbar.onToolSelected = (tool, btn) => this.setTool(tool, btn);
@@ -78,6 +78,17 @@ export class UIDesignController {
       toolbar.onSave = () => this.saveDesign();
       toolbar.onLoad = () => this.loadDesign();
       toolbar.onExportSVG = () => this.exportSVG();
+      toolbar.onWorkspaceChange = (workspace) => this.setWorkspace(workspace);
+    }
+
+    // A aba de codigo nao pede o arquivo ao controller: ela monta o texto
+    // com o gerador e so entrega o arquivo pronto. O download continua
+    // sendo do controller, como o do SVG.
+    if (code) {
+      code.onDownload = (fileName, text) => {
+        UIDesignController.download(new Blob([text], { type: 'text/html' }), fileName);
+        this._toast('HTML baixado em ' + fileName);
+      };
     }
 
     if (designView) {
@@ -166,11 +177,32 @@ export class UIDesignController {
      nao desenhava). */
 
   render() {
-    const { designView, layers, properties, toolbar } = this.views;
+    const { designView, layers, properties, toolbar, code } = this.views;
     if (designView) designView.render();
     if (layers) layers.render();
     if (properties) properties.render();
     if (toolbar) toolbar.setZoom(this.design.zoom);
+    // Qualquer mudanca no design deixa o codigo possivelmente velho. A
+    // aba so acende o aviso: regenerar por conta comeria o que a pessoa
+    // estiver editando no textarea.
+    if (code) code.markStale();
+  }
+
+  /**
+   * Troca entre o canvas e a aba de codigo. O SVG e escondido em vez de
+   * desmontado: e o mesmo desenho, e o rodizio de ferramentas continua
+   * valendo quando a pessoa volta.
+   */
+  setWorkspace(workspace) {
+    const { designView, code } = this.views;
+    const isCode = workspace === 'code';
+    if (designView && designView.svg) designView.svg.hidden = isCode;
+    if (code) {
+      // Gerar na entrada, e nao a cada `render`: quem entrou na aba
+      // quer o codigo do estado atual, e nao perder o que editou.
+      code.setActive(isCode);
+      if (isCode) code.generate();
+    }
   }
 
   setTool(tool, btn) {

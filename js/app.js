@@ -20,6 +20,7 @@ import { UIDesignView } from './views/UIDesignView.js';
 import { UIDesignToolbarView } from './views/UIDesignToolbarView.js';
 import { UILayerPanelView } from './views/UILayerPanelView.js';
 import { UIPropertiesView } from './views/UIPropertiesView.js';
+import { UIDesignCodeView } from './views/UIDesignCodeView.js';
 import { UIDesignController } from './controllers/UIDesignController.js';
 
 (function () {
@@ -93,6 +94,7 @@ import { UIDesignController } from './controllers/UIDesignController.js';
     designBackBtn: byId('design-back-btn'),
     designToolbar: byId('design-toolbar'),
     designSvg: byId('design-svg'),
+    designStage: byId('design-stage'),
     designLayers: byId('design-layers'),
     designProperties: byId('design-properties'),
 
@@ -140,11 +142,13 @@ import { UIDesignController } from './controllers/UIDesignController.js';
   const uiDesignView = new UIDesignView(uiDesign, ui);
   const uiLayerPanel = new UILayerPanelView(uiDesign, ui);
   const uiProperties = new UIPropertiesView(uiDesign, ui);
+  const uiDesignCode = new UIDesignCodeView(uiDesign, ui);
   const uiDesignController = new UIDesignController(uiDesign, {
     toolbar: uiDesignToolbar,
     designView: uiDesignView,
     layers: uiLayerPanel,
-    properties: uiProperties
+    properties: uiProperties,
+    code: uiDesignCode
   }, ui);
 
   /* ---- Inicializacao ---- */
@@ -160,6 +164,7 @@ import { UIDesignController } from './controllers/UIDesignController.js';
   uiDesignView.init();
   uiLayerPanel.init();
   uiProperties.init();
+  uiDesignCode.init();
   uiDesignController.init();
 
   // Trocar de ferramenta tira o anel do raio: so caneta e borracha tem

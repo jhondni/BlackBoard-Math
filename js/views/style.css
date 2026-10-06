@@ -1731,11 +1731,104 @@ body.design-mode #sidebar-tab { display: none; }
 .design-checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 
 /* ============================================
+   ABA DE CODIGO
+   ============================================ */
+.design-tabs { display: flex; align-items: center; gap: 2px; }
+.design-tab {
+  height: 32px; padding: 0 12px;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-secondary);
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.design-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+.design-tab.is-active {
+  background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
+}
+/* Na aba Codigo as ferramentas somem em vez de aceitar clique sem ter
+   onde desenhar -- e o que o agrupador novo existe para fazer. */
+.design-toolbar.is-code .design-toolbar-canvas-only { display: none; }
+.design-toolbar.is-code .design-toolbar-canvas-only + .design-toolbar-sep { display: none; }
+
+.design-code {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px; background: var(--bg-primary);
+}
+.design-code[hidden] { display: none; }
+.design-code-bar { display: flex; align-items: center; gap: 8px; }
+.design-code-title {
+  font-family: var(--font-sans); font-size: 12px; font-weight: 700;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em;
+}
+.design-code-select {
+  height: 30px; padding: 0 8px; max-width: 220px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-secondary); color: var(--text-primary);
+  font-family: var(--font-sans); font-size: 12px;
+}
+.design-code-stale {
+  font-family: var(--font-sans); font-size: 12px; color: var(--warning, #b8860b);
+}
+.design-code-btn {
+  height: 30px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-secondary); color: var(--text-primary);
+  font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.design-code-btn:hover { background: var(--bg-hover); }
+.design-code-btn.is-primary {
+  border-color: var(--accent); background: var(--accent); color: #fff;
+}
+
+.design-code-grid {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px;
+}
+.design-code-editor {
+  min-width: 0; min-height: 0;
+  display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 8px;
+}
+.design-code-pane {
+  min-height: 0; display: flex; flex-direction: column; gap: 4px;
+}
+.design-code-pane-title {
+  font-family: var(--font-sans); font-size: 11px; font-weight: 700;
+  color: var(--text-muted);
+}
+/* O textarea cresce com o texto e rola sozinho: o codigo gerado passa
+   de qualquer altura, e dar `resize` a ele espremeria a metade da tela. */
+.design-code-text {
+  flex: 1; min-height: 60px; width: 100%;
+  padding: 8px; resize: none;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-secondary); color: var(--text-primary);
+  font-family: var(--font-mono, monospace); font-size: 11.5px; line-height: 1.5;
+  tab-size: 2;
+}
+.design-code-text:focus { outline: none; border-color: var(--accent); }
+
+.design-code-preview-side {
+  min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.design-code-preview {
+  flex: 1; min-height: 0; width: 100%;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+/* ============================================
    RESPONSIVE
    ============================================ */
 @media (max-width: 1100px) {
   #controls-bar { right: 10px; }
   #workspace { padding-right: 70px; }
+  /* Codigo e preview sao lado a lado; abaixo disso um deles fica com
+     menos largura do que a menor tela util de uma tela de 320px. */
+  .design-code-grid { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
 }
 
 @media (max-width: 900px) {
