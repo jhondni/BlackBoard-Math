@@ -1328,7 +1328,9 @@ body.dark-mode #whiteboard::before {
    ============================================ */
 .help-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* 3x3 exato: sao 9 ferramentas (as 8 da lousa + o UI/UX Designer). Com
+     4 colunas a ultima linha ficaria com um card so. */
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-bottom: 24px;
 }

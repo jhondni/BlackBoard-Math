@@ -78,6 +78,11 @@ export class UIDesignController {
       designView.onCreateNode = (tool, props) => {
         const node = this.design.createNode(tool, props);
         this.design.selectNode(node);
+        // Criar e um comando de uma vez so: depois que o node nasce, a
+        // ferramenta volta para Selecionar (como no Figma) para ele poder
+        // ser arrastado e redimensionado na hora, em vez de exigir uma
+        // troca de ferramenta so para isso.
+        this.setTool('select');
         this.render();
       };
       designView.onSelect = () => this.render();

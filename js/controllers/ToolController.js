@@ -107,6 +107,9 @@ export class ToolController {
       if (key === 'e') { e.preventDefault(); this.onRequestEquation && this.onRequestEquation(); return; }
       if (key === 'g') { e.preventDefault(); this.onRequestGraph && this.onRequestGraph(); return; }
       if (key === 'i') { e.preventDefault(); this.onRequestImage && this.onRequestImage(); return; }
+      // Abre o modo Design. Com ele aberto a guarda la de cima ja cortou a
+      // tecla, entao `U` aqui nunca fecha: quem fecha e o botao "Voltar".
+      if (key === 'u') { e.preventDefault(); this.onRequestUXDesign && this.onRequestUXDesign(); return; }
       if (key === '=' || key === '+') { this.changeZoom(0.1); return; }
       if (key === '-') { this.changeZoom(-0.1); return; }
       if ((key === 'delete' || key === 'backspace')) { this.onDeleteSelected && this.onDeleteSelected(); return; }
