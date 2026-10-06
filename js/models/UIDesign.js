@@ -189,6 +189,26 @@ export class UIDesign {
     return true;
   }
 
+  /**
+   * Coloca o node na posicao `panelIndex` da lista de camadas,
+   * que e o array ao contrario: 0 e o topo da lista, a frente da
+   * pilha.
+   *
+   * A conversao para o indice do array acontece depois de tirar
+   * o node de la. Fazer antes desloca em um todos os indices do
+   * que sobrou, e o node cai na posicao vizinha da pedida.
+   */
+  moveNodeTo(id, panelIndex) {
+    const from = this.nodes.findIndex((node) => node.id === id);
+    if (from < 0) return false;
+
+    const wanted = UINode.toNumber(panelIndex, 0);
+    const [node] = this.nodes.splice(from, 1);
+    const clamped = Math.max(0, Math.min(this.nodes.length, wanted));
+    this.nodes.splice(this.nodes.length - clamped, 0, node);
+    return true;
+  }
+
   /* ---- Viewport ---- */
 
   setZoom(value) {

@@ -110,6 +110,10 @@ export class UIDesignController {
         this.design.renameNode(id, name);
         this.render();
       };
+      // `panelIndex` e a posicao na lista (0 = topo = frente da pilha).
+      layers.onMoveNode = (id, panelIndex) => {
+        if (this.design.moveNodeTo(id, panelIndex)) this.render();
+      };
       layers.onRequestEditText = (node) => this.requestEditText(node);
     }
 

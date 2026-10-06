@@ -1686,6 +1686,22 @@ body.design-mode #sidebar-tab { display: none; }
   padding: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.5;
 }
 
+/* ---- arrastar para reordenar ---- */
+.design-layers-list.is-reordering { cursor: grabbing; }
+.design-layers-list.is-reordering .design-layer { cursor: grabbing; }
+.design-layer.is-dragging { opacity: 0.4; }
+.design-layer.is-ghost {
+  position: fixed; top: 0; left: 0; z-index: 60;
+  margin: 0; pointer-events: none;
+  background: var(--bg-panel); border-color: var(--accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  cursor: grabbing;
+}
+.design-drop {
+  flex: none; height: 2px; margin: 1px 2px;
+  background: var(--accent); border-radius: 2px;
+}
+
 /* ---- propriedades ---- */
 .design-properties-body {
   flex: 1; overflow-y: auto; padding: 0 14px 16px;

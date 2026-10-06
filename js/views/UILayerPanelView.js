@@ -8,9 +8,15 @@
    A lista e um espelho de `UIDesign.layers`, e nao
    uma fonte: toda acao aqui vira chamada no modelo
    (`selectById`, `toggleNodeVisibility`,
-   `toggleNodeLock`, `renameNode`) e o controller
-   redesenha. Por isso o painel nao guarda estado
-   proprio alem do campo de renomear em edicao.
+   `toggleNodeLock`, `renameNode`, `moveNodeTo`) e o
+   controller redesenha. Por isso o painel nao guarda
+   estado proprio alem do campo de renomear em edicao
+   e do arrasto em andamento.
+
+   Reordenar e arrastar, com Pointer Events como o
+   resto do modulo. O arrasto so comeca depois de alguns
+   pixels, senao o clique que seleciona e o duplo clique
+   que renomeia param de funcionar.
    ============================================ */
 
 const ICON_BY_TYPE = {
@@ -24,17 +30,31 @@ const EYE_OFF = '<path fill="none" stroke="currentColor" stroke-width="1.8" stro
 const LOCK_ON = '<path fill="currentColor" d="M7 10V8a5 5 0 0110 0v2h1v10H6V10h1zm2 0h6V8a3 3 0 00-6 0v2z"/>';
 const LOCK_OFF = '<path fill="none" stroke="currentColor" stroke-width="1.8" d="M7 10V8a5 5 0 019.5-2M6 10h12v10H6V10z"/>';
 
+/** Percorridos antes do clique virar arrasto, em px. */
+const DRAG_THRESHOLD = 4;
+/** Perto da borda da lista o arrasto rola sozinho, em px. */
+const EDGE_ZONE = 24;
+const EDGE_STEP = 8;
+
 export class UILayerPanelView {
   constructor(design, $) {
     this.design = design;
     this.$ = $;
     this.list = null;
+    this.drag = null;
+    this.indicator = null;
 
     this.onSelectNode = null;      // (id) => void
     this.onToggleVisible = null;   // (id) => void
     this.onToggleLock = null;      // (id) => void
     this.onRename = null;          // (id, name) => void
+    this.onMoveNode = null;        // (id, panelIndex) => void
     this.onRequestEditText = null; // (node) => void
+
+    // referencias estaveis: as linhas sao recriadas a cada render,
+    // e o arrasto precisa tirar o listener de cima da linha certa.
+    this._onDragMove = (e) => this._dragMove(e);
+    this._onDragEnd = (e) => this._dragEnd(e);
   }
 
   init() {
@@ -60,6 +80,7 @@ export class UILayerPanelView {
 
   render() {
     if (!this.list) return;
+    if (this.drag) this._cancelDrag();
     this.list.textContent = '';
 
     const layers = this.design.layers;
@@ -98,8 +119,14 @@ export class UILayerPanelView {
       () => this.onToggleLock && this.onToggleLock(item.id)));
 
     row.addEventListener('click', () => {
+      if (this._swallowClick) {
+        this._swallowClick = false;
+        return;
+      }
       if (this.onSelectNode) this.onSelectNode(item.id);
     });
+
+    row.addEventListener('pointerdown', (e) => this._dragStart(e, row, item.id));
 
     // Duplo clique renomeia; em texto, o duplo clique ja e o atalho de
     // edicao -- o campo de texto do no abre no painel de propriedades.
@@ -128,6 +155,163 @@ export class UILayerPanelView {
       onClick();
     });
     return btn;
+  }
+
+  /* ---- Reordenar por arrasto ---- */
+
+  /**
+   * Comeca um arrasto *possivel*: os listeners vao na propria linha
+   * e o ponteiro so e capturado quando o arrasto de fato comeca.
+   * Sem isso o arrasto morre no primeiro pixel fora da linha, que
+   * tem meia duzia de altura.
+   */
+  _dragStart(e, row, id) {
+    if (this.drag || e.button !== 0) return;
+    if (e.target.closest('.design-layer-action, .design-layer-rename')) return;
+
+    this.drag = {
+      id,
+      row,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      active: false,
+      target: 0,
+      ghost: null
+    };
+
+    row.addEventListener('pointermove', this._onDragMove);
+    row.addEventListener('pointerup', this._onDragEnd);
+    row.addEventListener('pointercancel', this._onDragEnd);
+  }
+
+  _dragMove(e) {
+    const drag = this.drag;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+
+    if (!drag.active) {
+      const dx = Math.abs(e.clientX - drag.startX);
+      const dy = Math.abs(e.clientY - drag.startY);
+      if (dx + dy < DRAG_THRESHOLD) return;
+      this._dragActivate();
+    }
+
+    e.preventDefault();
+    drag.ghost.style.transform = 'translate(' + (e.clientX + 12) + 'px,' + (e.clientY + 10) + 'px)';
+
+    const target = this._dropIndexFor(e.clientY);
+    if (target !== drag.target) {
+      drag.target = target;
+      this._showIndicator(target);
+    }
+    this._autoScroll(e.clientY);
+  }
+
+  _dragActivate() {
+    const drag = this.drag;
+    drag.active = true;
+    drag.row.classList.add('is-dragging');
+    this.list.classList.add('is-reordering');
+
+    const ghost = drag.row.cloneNode(true);
+    ghost.className = 'design-layer is-ghost';
+    ghost.style.width = drag.row.offsetWidth + 'px';
+    document.body.appendChild(ghost);
+    drag.ghost = ghost;
+
+    this.indicator = document.createElement('div');
+    this.indicator.className = 'design-drop';
+
+    if (drag.row.setPointerCapture) {
+      try {
+        drag.row.setPointerCapture(drag.pointerId);
+      } catch {
+        // navegador sem captura: o arrasto segue pelos eventos da linha
+      }
+    }
+  }
+
+  /**
+   * Indice de destino na lista *sem* a linha arrastada, que e o que
+   * `moveNodeTo` espera. A faixa acima da metade da linha aponta o
+   * destino; abaixo de todas as linhas, o fundo da pilha.
+   */
+  _dropIndexFor(y) {
+    const rows = this._otherRows();
+    for (let i = 0; i < rows.length; i += 1) {
+      const box = rows[i].getBoundingClientRect();
+      if (y < box.top + box.height / 2) return i;
+    }
+    return rows.length;
+  }
+
+  /** Linhas da lista fora a linha arrastada. */
+  _otherRows() {
+    return Array.from(this.list.querySelectorAll('.design-layer'))
+      .filter((row) => row !== this.drag.row);
+  }
+
+  _showIndicator(index) {
+    this.list.insertBefore(this.indicator, this._otherRows()[index] || null);
+  }
+
+  _autoScroll(y) {
+    const box = this.list.getBoundingClientRect();
+    if (y < box.top + EDGE_ZONE) this.list.scrollTop -= EDGE_STEP;
+    else if (y > box.bottom - EDGE_ZONE) this.list.scrollTop += EDGE_STEP;
+  }
+
+  _dragEnd(e) {
+    if (!this.drag || e.pointerId !== this.drag.pointerId) return;
+
+    const drag = this._clearDrag();
+    if (!drag.active) return;
+
+    // Gesto cancelado pelo navegador ou pelo sistema: some com o
+    // rastro, sem mover e sem armar a trava de clique -- se armasse,
+    // o proximo clique do usuario seria engolido.
+    if (e.type === 'pointercancel') return;
+
+    // O `click` de compatibilidade e disparado na mesma tarefa do
+    // `pointerup`, entao a flag e necessaria para o arrasto nao
+    // acabar selecionando a camada de origem.
+    this._swallowClick = true;
+    setTimeout(() => { this._swallowClick = false; }, 0);
+
+    if (this.onMoveNode) this.onMoveNode(drag.id, drag.target);
+  }
+
+  /** Aborta o arrasto sem mover nada: o redesenho chegou antes dele. */
+  _cancelDrag() {
+    this._clearDrag();
+  }
+
+  /** Solta o arrasto, limpa rastro e devolve o que estava em curso. */
+  _clearDrag() {
+    const drag = this.drag;
+    this.drag = null;
+    if (!drag) return null;
+
+    drag.row.removeEventListener('pointermove', this._onDragMove);
+    drag.row.removeEventListener('pointerup', this._onDragEnd);
+    drag.row.removeEventListener('pointercancel', this._onDragEnd);
+
+    if (drag.row.releasePointerCapture) {
+      try {
+        drag.row.releasePointerCapture(drag.pointerId);
+      } catch {
+        // ponteiro ja liberado pelo navegador
+      }
+    }
+
+    drag.row.classList.remove('is-dragging');
+    if (this.list) this.list.classList.remove('is-reordering');
+    if (drag.ghost) drag.ghost.remove();
+    if (this.indicator) {
+      this.indicator.remove();
+      this.indicator = null;
+    }
+    return drag;
   }
 
   /** Renomear no lugar: um input na propria linha, Enter confirma, Esc volta. */
