@@ -1,0 +1,209 @@
+/* ============================================
+   UI/UX DESIGNER - UIDesignToolbarView
+   ============================================
+   Barra de ferramentas do modo Design: as ferramentas
+   de criacao, os toggles de visualizacao (grade,
+   guias, encaixe), o zoom e as acoes de arquivo.
+
+   O botao "Voltar para a lousa" nao e montado aqui:
+   ele pertence ao container do modo Design e e ligado
+   pelo controller, que e quem sabe trocar de modo.
+   ============================================ */
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+const ICONS = {
+  select: '<path fill="currentColor" d="M7 2l10 10-4.5 1 2.8 6.5-2.5 1.1-2.8-6.5L7 17V2z"/>',
+  frame: '<path fill="none" stroke="currentColor" stroke-width="2" d="M7 3v18M17 3v18M3 7h18M3 17h18"/>',
+  rect: '<rect x="4" y="6" width="16" height="12" rx="2" fill="currentColor"/>',
+  ellipse: '<ellipse cx="12" cy="12" rx="8" ry="6" fill="currentColor"/>',
+  line: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 19L19 5"/>',
+  text: '<path fill="currentColor" d="M5 4v3h5.5v12h3V7H19V4H5z"/>',
+  grid: '<path fill="none" stroke="currentColor" stroke-width="1.6" d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
+  guides: '<path fill="none" stroke="currentColor" stroke-width="1.6" d="M12 3v18"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/>',
+  snap: '<path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M5 4v8a7 7 0 0014 0V4M12 12v8"/>',
+  minus: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 12h14"/>',
+  plus: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/>',
+  save: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M5 3h11l3 3v15H5V3zm3 0v6h7V3M8 21v-7h8v7"/>',
+  open: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 6h6l2 3h8v11H4V6z"/>',
+  download: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 4v10m0 0l-4-4m4 4l4-4M4 19h16"/>'
+};
+
+export class UIDesignToolbarView {
+  constructor(design, $) {
+    this.design = design;
+    this.$ = $;
+
+    this.currentTool = 'select';
+
+    // id do botao -> ferramenta. O prefixo `dtool` evita colisao com a
+    // toolbar da lousa (`tool-*`), que fica viva ao lado no mesmo DOM.
+    this.tools = {
+      'dtool-select': 'select',
+      'dtool-frame': 'frame',
+      'dtool-rect': 'rect',
+      'dtool-ellipse': 'ellipse',
+      'dtool-line': 'line',
+      'dtool-text': 'text'
+    };
+
+    this.onToolSelected = null;   // (tool, btn) => void
+    this.onToggleGrid = null;     // (ativo) => void
+    this.onToggleGuides = null;   // (ativo) => void
+    this.onToggleSnap = null;     // (ativo) => void
+    this.onZoomChange = null;     // (delta) => void
+    this.onSave = null;
+    this.onLoad = null;
+    this.onExportSVG = null;
+  }
+
+  init() {
+    const bar = this.$.designToolbar;
+    if (!bar) return false;
+
+    bar.textContent = '';
+    bar.classList.add('design-toolbar');
+
+    bar.appendChild(this._group([
+      this._toolButton('dtool-select', 'select', 'Selecionar (V)'),
+      this._toolButton('dtool-frame', 'frame', 'Frame (F)'),
+      this._toolButton('dtool-rect', 'rect', 'Retangulo (R)'),
+      this._toolButton('dtool-ellipse', 'ellipse', 'Elipse (O)'),
+      this._toolButton('dtool-line', 'line', 'Linha (L)'),
+      this._toolButton('dtool-text', 'text', 'Texto (T)')
+    ]));
+
+    bar.appendChild(this._separator());
+
+    bar.appendChild(this._group([
+      this._toggleButton('dtool-grid', 'grid', 'Grade'),
+      this._toggleButton('dtool-guides', 'guides', 'Guias'),
+      this._toggleButton('dtool-snap', 'snap', 'Encaixe')
+    ]));
+
+    bar.appendChild(this._separator());
+
+    this.zoomLabel = this._element('span', 'design-zoom-label');
+    bar.appendChild(this._group([
+      this._button('dtool-zoom-out', 'minus', 'Reduzir zoom', () => this.onZoomChange && this.onZoomChange(-0.1)),
+      this.zoomLabel,
+      this._button('dtool-zoom-in', 'plus', 'Aumentar zoom', () => this.onZoomChange && this.onZoomChange(0.1))
+    ]));
+
+    bar.appendChild(this._separator());
+
+    bar.appendChild(this._group([
+      this._button('dtool-save', 'save', 'Salvar .uidesign.json', () => this.onSave && this.onSave(), 'Salvar'),
+      this._button('dtool-load', 'open', 'Abrir .uidesign.json', () => this.onLoad && this.onLoad(), 'Abrir'),
+      this._button('dtool-export-svg', 'download', 'Exportar SVG', () => this.onExportSVG && this.onExportSVG(), 'SVG')
+    ]));
+
+    this.setTool(this.currentTool);
+    this.syncToggles();
+    this.setZoom(this.design.zoom);
+    return true;
+  }
+
+  /* ---- Construcao ---- */
+
+  _group(children) {
+    const group = this._element('div', 'design-toolbar-group');
+    children.forEach((child) => group.appendChild(child));
+    return group;
+  }
+
+  _separator() {
+    return this._element('div', 'design-toolbar-sep');
+  }
+
+  _element(tag, className) {
+    const node = document.createElement(tag);
+    node.className = className;
+    return node;
+  }
+
+  _icon(name) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.innerHTML = ICONS[name] || '';
+    return svg;
+  }
+
+  _button(id, icon, title, onClick, label) {
+    const btn = this._element('button', 'design-btn');
+    btn.id = id;
+    btn.type = 'button';
+    btn.title = title;
+    btn.appendChild(this._icon(icon));
+    if (label) {
+      const text = this._element('span', 'design-btn-label');
+      text.textContent = label;
+      btn.appendChild(text);
+    }
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  _toolButton(id, tool, title) {
+    // A chave do icone e o proprio nome da ferramenta.
+    const btn = this._button(id, tool, title, () => {
+      if (this.onToolSelected) this.onToolSelected(tool, btn);
+    });
+    btn.dataset.tool = tool;
+    return btn;
+  }
+
+  _toggleButton(id, icon, label) {
+    const btn = this._element('button', 'design-btn design-toggle');
+    btn.id = id;
+    btn.type = 'button';
+    btn.appendChild(this._icon(icon));
+    const text = this._element('span', 'design-btn-label');
+    text.textContent = label;
+    btn.appendChild(text);
+    btn.addEventListener('click', () => {
+      // Os tres flags sao preference de visualizacao, nao geometria: o
+      // toggle mexe no modelo e o controller so repinta o que mudou.
+      const key = icon === 'grid' ? 'showGrid' : icon === 'guides' ? 'showGuides' : 'snap';
+      this.design[key] = !this.design[key];
+      this.syncToggles();
+      const callback = icon === 'grid'
+        ? this.onToggleGrid
+        : icon === 'guides' ? this.onToggleGuides : this.onToggleSnap;
+      if (callback) callback(this.design[key]);
+    });
+    return btn;
+  }
+
+  /* ---- Estado ---- */
+
+  setTool(tool, btn) {
+    this.currentTool = tool;
+    const active = btn || document.getElementById('dtool-' + tool);
+    const bar = this.$.designToolbar;
+    if (!bar) return;
+    bar.querySelectorAll('.design-btn[data-tool]').forEach((item) => {
+      item.classList.toggle('is-active', item === active);
+    });
+  }
+
+  /** Reflete o estado do modelo nos toggles (usado ao carregar arquivo). */
+  syncToggles() {
+    const bar = this.$.designToolbar;
+    if (!bar) return;
+    this._setToggle('dtool-grid', this.design.showGrid);
+    this._setToggle('dtool-guides', this.design.showGuides);
+    this._setToggle('dtool-snap', this.design.snap);
+  }
+
+  _setToggle(id, active) {
+    const btn = document.getElementById(id);
+    if (btn) btn.classList.toggle('is-active', active === true);
+  }
+
+  setZoom(zoom) {
+    if (this.zoomLabel) this.zoomLabel.textContent = Math.round(zoom * 100) + '%';
+  }
+}
