@@ -21,6 +21,7 @@ export class ToolbarView {
       'tool-equation': 'equation',
       'tool-graph': 'graph',
       'tool-image': 'image',
+      'tool-uxdesign': 'uxdesign',
       'tool-eraser': 'eraser',
       'tool-blur': 'blur'
     };

@@ -13,24 +13,23 @@ import { UIText } from '../models/UIText.js';
    continua intacta enquanto ele esta aberto.
 
    ------------------------------------------------------------------------
-   HTML esperado (a ser ligado em `index.html` na Fase 2):
+   HTML ligado em `index.html`:
 
    <div id="design-container" class="hidden">
-     <button id="design-back-btn">Voltar a lousa</button>
+     <button id="design-back-btn">Voltar a Lousa</button>
      <div id="design-toolbar"></div>
      <div id="design-body">
        <div id="design-stage"><svg id="design-svg"></svg></div>
        <aside id="design-sidebar">
-         <div id="design-layers"></div>
-         <div id="design-properties"></div>
+         <div id="design-layers" class="design-layers"></div>
+         <div id="design-properties" class="design-properties"></div>
        </aside>
      </div>
    </div>
 
-   O CSS do modulo entra por `injectStyles()` em vez de
-   `style.css` porque a Fase 1 nao toca no arquivo de
-   estilos da aplicacao; e um `<style>` proprio, com as
-   mesmas variaveis de tema, para migrar tal e qual.
+   O CSS do modulo esta em `js/views/style.css`, na secao
+   "MODO DESIGN", e reaproveita as mesmas variaveis de tema
+   da aplicacao.
 
    Chaves esperadas em `$`:
      designContainer, designBackBtn, whiteboard, toast
@@ -39,8 +38,6 @@ import { UIText } from '../models/UIText.js';
    de `init()` quando a chave nao existe -- o modo Design
    fica inerte em vez de quebrar a lousa.
    ============================================ */
-
-const STYLE_ID = 'ui-design-styles';
 
 /** Props que o painel atribui direto no no, sem passar por metodo. */
 const DIRECT_PROPS = [
@@ -62,8 +59,6 @@ export class UIDesignController {
    * @returns {UIDesignController} this, para encadear na montagem.
    */
   init() {
-    UIDesignController.injectStyles();
-
     const { toolbar, designView, layers, properties } = this.views;
 
     if (toolbar) {
@@ -247,10 +242,10 @@ export class UIDesignController {
      `D` viraria caneta enquanto se cria um frame. Por isso o
      listener daqui e de captura e chama
      `stopImmediatePropagation`: ele roda antes do da lousa e
-     impede que a outra camada veja a tecla. Quando a Fase 2
-     ligar os modos, o certo e o `ToolController` saber que o
-     modo Design esta aberto; o `stopImmediatePropagation` e a
-     ponte ate la. */
+     impede que a outra camada veja a tecla. E o `ToolController`
+     tambem pergunta por `isUXDesignActive()` antes de agir,
+     para as teclas que aqui nao sao tratadas (`E`, `G`, `+`)
+     nao abrirem os modais da lousa por cima do modo Design. */
 
   _bindKeys() {
     document.addEventListener('keydown', (e) => this._onKeyDown(e), true);
@@ -383,240 +378,5 @@ export class UIDesignController {
     else toast.style.removeProperty('color');
     clearTimeout(toast._timer);
     toast._timer = setTimeout(() => toast.classList.remove('show'), 2400);
-  }
-
-  /* ---- CSS do modulo ----
-     Injeta uma vez. Usa as mesmas variaveis de tema da
-     aplicacao, entao o modo escuro vem de graca; quando a
-     Fase 2 abrir o `style.css`, este bloco e copiado la e a
-     injecao some. */
-
-  static injectStyles() {
-    if (document.getElementById(STYLE_ID)) return;
-
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = UIDesignController.styles();
-    document.head.appendChild(style);
-  }
-
-  static styles() {
-    return `
-/* ---- container do modo Design ---- */
-#design-container {
-  position: absolute; inset: 0; z-index: 5;
-  display: flex; flex-direction: column;
-  background: var(--bg-base); overflow: hidden;
-}
-#design-container.hidden { display: none; }
-#whiteboard.hidden { display: none; }
-body.design-mode #workspace { padding: 0; overflow: hidden; }
-body.design-mode #toolbar,
-body.design-mode #controls-bar,
-body.design-mode #pages-sidebar,
-body.design-mode #sidebar-tab { display: none; }
-
-#design-back-btn {
-  position: absolute; top: 16px; left: 16px; z-index: 20;
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 34px; padding: 0 14px;
-  border: 1px solid var(--border); border-radius: var(--radius-pill);
-  background: var(--bg-toolbar);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  color: var(--text-primary); font-family: var(--font-sans);
-  font-size: 13px; font-weight: 600; cursor: pointer;
-  box-shadow: var(--shadow-md);
-  transition: color var(--transition), border-color var(--transition);
-}
-#design-back-btn:hover { color: var(--accent); border-color: var(--accent); }
-
-#design-body { flex: 1; display: flex; min-height: 0; }
-#design-stage { position: relative; flex: 1; min-width: 0; overflow: hidden; }
-
-/* ---- canvas ---- */
-#design-svg {
-  display: block; width: 100%; height: 100%;
-  touch-action: none; user-select: none; outline: none;
-}
-/* A grade e um <rect> dentro do <g> transformado, entao existe mesmo com o
-   desenho desligado: e a regra abaixo que a esconde. */
-#design-svg:not(.show-grid) .design-grid { display: none; }
-#design-svg[data-tool="frame"],
-#design-svg[data-tool="rect"],
-#design-svg[data-tool="ellipse"],
-#design-svg[data-tool="line"],
-#design-svg[data-tool="text"] { cursor: crosshair; }
-#design-svg[data-tool="select"] { cursor: default; }
-#design-svg.is-panning { cursor: grab; }
-
-.design-grid { pointer-events: none; }
-.design-grid-line { stroke: var(--border-strong); }
-.design-guide {
-  stroke: #f59e0b; stroke-width: 1; stroke-dasharray: 4 3;
-  vector-effect: non-scaling-stroke; pointer-events: none;
-}
-.design-hit { fill: transparent; }
-.design-node { cursor: move; }
-.design-node.is-locked { pointer-events: none; }
-.design-frame {
-  stroke: var(--border-strong); stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-.design-frame-label {
-  fill: var(--text-muted); font-family: var(--font-sans); font-size: 11px;
-  pointer-events: none;
-}
-.design-text { font-family: var(--font-sans); white-space: pre; }
-
-/* ---- contorno de selecao ---- */
-.design-outline {
-  fill: none; stroke: var(--accent); stroke-width: 1;
-  vector-effect: non-scaling-stroke; pointer-events: none;
-}
-.design-handle {
-  fill: var(--bg-surface); stroke: var(--accent); stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-.design-handle-rotate { fill: var(--accent); cursor: grab; }
-.design-rotate-stem {
-  stroke: var(--accent); stroke-width: 1; pointer-events: none;
-  vector-effect: non-scaling-stroke;
-}
-.design-preview-shape {
-  fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1;
-  stroke-dasharray: 4 3; vector-effect: non-scaling-stroke;
-}
-.design-measure {
-  fill: var(--accent); font-family: var(--font-mono); font-size: 11px;
-  pointer-events: none;
-}
-.design-snap-line {
-  /* Magenta: e a cor que nao existe no tema, para nao se confundir com
-     guia (ambar) nem com selecao (acento). */
-  stroke: #e84393; stroke-width: 1; pointer-events: none;
-  vector-effect: non-scaling-stroke;
-}
-
-.design-handle.dir-nw, .design-handle.dir-se { cursor: nwse-resize; }
-.design-handle.dir-ne, .design-handle.dir-sw { cursor: nesw-resize; }
-.design-handle.dir-n, .design-handle.dir-s { cursor: ns-resize; }
-.design-handle.dir-e, .design-handle.dir-w { cursor: ew-resize; }
-
-/* ---- toolbar ---- */
-#design-toolbar {
-  display: flex; align-items: center; gap: 6px;
-  padding: 10px 16px; border-bottom: 1px solid var(--border);
-  background: var(--bg-toolbar);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  overflow-x: auto;
-}
-.design-toolbar-group { display: flex; align-items: center; gap: 4px; }
-.design-toolbar-sep { width: 1px; height: 24px; background: var(--border); }
-.design-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 32px; padding: 0 8px;
-  border: 1px solid transparent; border-radius: var(--radius-sm);
-  background: transparent; color: var(--text-secondary);
-  font-family: var(--font-sans); font-size: 12px; font-weight: 600;
-  cursor: pointer; white-space: nowrap;
-  transition: background var(--transition), color var(--transition),
-              border-color var(--transition);
-}
-.design-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.design-btn.is-active {
-  background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
-}
-.design-zoom-label {
-  min-width: 48px; text-align: center;
-  font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);
-}
-.design-danger {
-  width: 100%; justify-content: center; margin-top: 4px;
-  color: var(--danger); border-color: var(--danger-soft);
-}
-
-/* ---- painel lateral ---- */
-#design-sidebar {
-  display: flex; flex-direction: column; min-height: 0;
-  width: 280px; border-left: 1px solid var(--border);
-  background: var(--bg-sidebar);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
-.design-layers {
-  flex: 1 1 45%; display: flex; flex-direction: column; min-height: 0;
-  border-bottom: 1px solid var(--border);
-}
-.design-properties {
-  flex: 1 1 55%; display: flex; flex-direction: column; min-height: 0;
-}
-.design-panel-header {
-  padding: 14px 16px 10px; font-size: 11px; font-weight: 700;
-  letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);
-}
-.design-layers-list {
-  flex: 1; overflow-y: auto; padding: 0 8px 12px;
-  display: flex; flex-direction: column; gap: 2px;
-}
-.design-layer {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 8px; border-radius: var(--radius-xs);
-  border: 1px solid transparent; cursor: pointer;
-  font-size: 12px; color: var(--text-primary);
-}
-.design-layer:hover { background: var(--bg-hover); }
-.design-layer.is-selected { background: var(--accent-soft); border-color: var(--accent); }
-.design-layer.is-hidden { opacity: 0.45; }
-.design-layer-icon { display: inline-flex; color: var(--text-muted); }
-.design-layer-name {
-  flex: 1; min-width: 0; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap;
-}
-.design-layer-action {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; padding: 0;
-  border: none; border-radius: 6px; background: none;
-  color: var(--text-muted); cursor: pointer;
-}
-.design-layer-action:hover { background: var(--bg-hover); color: var(--accent); }
-.design-layer-rename {
-  flex: 1; min-width: 0; height: 22px; padding: 0 6px;
-  border: 1px solid var(--accent); border-radius: 6px;
-  background: var(--bg-input); color: var(--text-primary);
-  font-family: var(--font-sans); font-size: 12px; outline: none;
-}
-.design-empty {
-  padding: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.5;
-}
-
-/* ---- propriedades ---- */
-.design-properties-body {
-  flex: 1; overflow-y: auto; padding: 0 14px 16px;
-  display: flex; flex-direction: column; gap: 14px;
-}
-.design-prop-group { display: flex; flex-direction: column; gap: 6px; }
-.design-prop-group-title {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
-  text-transform: uppercase; color: var(--text-muted);
-}
-.design-field {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; font-size: 12px; color: var(--text-secondary);
-}
-.design-field-label { flex: 0 0 42%; }
-.design-input {
-  flex: 1; min-width: 0; height: 28px; padding: 0 8px;
-  border: 1px solid var(--border); border-radius: var(--radius-xs);
-  background: var(--bg-input); color: var(--text-primary);
-  font-family: var(--font-sans); font-size: 12px; outline: none;
-  transition: border-color var(--transition), box-shadow var(--transition);
-}
-.design-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.design-textarea { height: auto; padding: 6px 8px; resize: vertical; line-height: 1.4; }
-.design-color { padding: 2px; cursor: pointer; }
-.design-checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
-`;
   }
 }

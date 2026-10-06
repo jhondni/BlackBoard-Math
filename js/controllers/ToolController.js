@@ -15,6 +15,7 @@ export class ToolController {
     this.onRequestEquation = null;  // () => void
     this.onRequestGraph = null;      // () => void
     this.onRequestImage = null;      // () => void
+    this.onRequestUXDesign = null;   // () => void -> abre/fecha o modo Design
     this.onBlur = null;              // () => void -> borrar objeto selecionado
     this.onUndo = null;
     this.onRedo = null;
@@ -22,6 +23,8 @@ export class ToolController {
     this.onDeleteSelected = null;
     this.onEscape = null;
     this.onToolChange = null;   // (tool) => void -> guia do raio some ao trocar
+    // () => boolean -> o modo Design esta aberto e tem o teclado dele
+    this.isUXDesignActive = null;
   }
 
   /**
@@ -55,6 +58,9 @@ export class ToolController {
     if (tool === 'equation') return this.onRequestEquation && this.onRequestEquation();
     if (tool === 'graph') return this.onRequestGraph && this.onRequestGraph();
     if (tool === 'image') return this.onRequestImage && this.onRequestImage();
+    // 'uxdesign' e um modo, nao uma ferramenta: nao vira a ferramenta ativa
+    // da lousa, so troca o que o #workspace mostra.
+    if (tool === 'uxdesign') return this.onRequestUXDesign && this.onRequestUXDesign();
     if (tool === 'blur') {
       this._setTool(tool);
       if (this.onBlur) this.onBlur();
@@ -82,6 +88,11 @@ export class ToolController {
   _bindKeyboard() {
     document.addEventListener('keydown', (e) => {
       if (this._isTyping(e)) return;
+
+      // Modo Design aberto: o teclado e dele. O listener dele e de captura e
+      // para as teclas que ele trata, mas `E`, `G`, `+` e `Ctrl+Z` ficariam
+      // so com a lousa -- e abririam modal ou dariam zoom em cima do design.
+      if (this.isUXDesignActive && this.isUXDesignActive()) return;
 
       const key = e.key.toLowerCase();
 

@@ -15,6 +15,12 @@ import { BoardController } from './controllers/BoardController.js';
 import { ToolController } from './controllers/ToolController.js';
 import { ObjectController } from './controllers/ObjectController.js';
 import { MouseController } from './controllers/MouseController.js';
+import { UIDesign } from './models/UIDesign.js';
+import { UIDesignView } from './views/UIDesignView.js';
+import { UIDesignToolbarView } from './views/UIDesignToolbarView.js';
+import { UILayerPanelView } from './views/UILayerPanelView.js';
+import { UIPropertiesView } from './views/UIPropertiesView.js';
+import { UIDesignController } from './controllers/UIDesignController.js';
 
 (function () {
   'use strict';
@@ -82,6 +88,14 @@ import { MouseController } from './controllers/MouseController.js';
     libraryList: byId('library-list'),
     saveToLibraryBtn: byId('save-to-library-btn'),
 
+    /* Modo Design (UI/UX Designer) */
+    designContainer: byId('design-container'),
+    designBackBtn: byId('design-back-btn'),
+    designToolbar: byId('design-toolbar'),
+    designSvg: byId('design-svg'),
+    designLayers: byId('design-layers'),
+    designProperties: byId('design-properties'),
+
     /* Diversos */
     toast: byId('toast'),
     workspace: byId('workspace'),
@@ -118,16 +132,50 @@ import { MouseController } from './controllers/MouseController.js';
     toolController, mouseController, objectController, selectionView, ui
   );
 
+  /* ---- Modulo UI/UX Designer ----
+     Documento separado: o `UIDesign` nao conhece a `Board`, e o
+     arquivo `.uidesign.json` tambem e separado do projeto da lousa. */
+  const uiDesign = new UIDesign();
+  const uiDesignToolbar = new UIDesignToolbarView(uiDesign, ui);
+  const uiDesignView = new UIDesignView(uiDesign, ui);
+  const uiLayerPanel = new UILayerPanelView(uiDesign, ui);
+  const uiProperties = new UIPropertiesView(uiDesign, ui);
+  const uiDesignController = new UIDesignController(uiDesign, {
+    toolbar: uiDesignToolbar,
+    designView: uiDesignView,
+    layers: uiLayerPanel,
+    properties: uiProperties
+  }, ui);
+
   /* ---- Inicializacao ---- */
   mathEditor.init();
   toolbar.init();
   toolController.init();
   boardController.init();
 
+  // Cada view se monta antes do controller: e o `init()` dele que ja
+  // repinta, e as views devolvem `false` em vez de estourar quando o
+  // HTML do modo Design nao existe.
+  uiDesignToolbar.init();
+  uiDesignView.init();
+  uiLayerPanel.init();
+  uiProperties.init();
+  uiDesignController.init();
+
   // Trocar de ferramenta tira o anel do raio: so caneta e borracha tem
   // guia, e ele nao pode ficar orfao na tela.
   toolController.onToolChange = () => mouseController.hideDrawGuide();
 
+  // O botao da toolbar so troca o modo; e a lousa que para de reagir ao
+  // teclado enquanto o modo Design esta aberto.
+  toolController.onRequestUXDesign = () => uiDesignController.toggleDesignMode();
+  toolController.isUXDesignActive = () => uiDesignController.active;
+
   // Disponibiliza o controller no escopo global para debug.
-  window.__lousa = { board, boardController };
+  window.__lousa = {
+    board,
+    boardController,
+    uiDesign,
+    uiDesignController
+  };
 })();

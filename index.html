@@ -110,6 +110,14 @@
     <div class="toolbar-sep"></div>
 
     <div class="toolbar-section">
+      <button id="tool-uxdesign" class="tool-btn accent-btn" data-tooltip="UI/UX Designer">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-section">
       <button id="undo-btn" class="tool-btn" data-tooltip="Desfazer (Ctrl+Z)">
         <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12.5 8c-2.65 0-5.05 1.04-6.83 2.73L2 7.08V16h8.92l-3.69-3.69A7.96 7.96 0 0112.5 10c3.53 0 6.43 2.61 6.92 6h2.02c-.5-4.57-4.31-8-8.94-8z"/></svg>
       </button>
@@ -165,6 +173,24 @@
         <!-- Guia do raio efetivo da caneta/borracha. Efemero: some ao
              tirar o mouse do canvas ou trocar de ferramenta. -->
         <div id="draw-guide" class="draw-guide" hidden></div>
+      </div>
+    </div>
+
+    <!-- MODO DESIGN - ocupa o #workspace inteiro, esconde a lousa -->
+    <div id="design-container" class="hidden">
+      <button id="design-back-btn">
+        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg>
+        Voltar a Lousa
+      </button>
+      <div id="design-toolbar"></div>
+      <div id="design-body">
+        <div id="design-stage">
+          <svg id="design-svg"></svg>
+        </div>
+        <aside id="design-sidebar">
+          <div id="design-layers" class="design-layers"></div>
+          <div id="design-properties" class="design-properties"></div>
+        </aside>
       </div>
     </div>
   </main>
