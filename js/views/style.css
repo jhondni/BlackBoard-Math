@@ -1609,6 +1609,11 @@ body.design-mode #sidebar-tab { display: none; }
   overflow-x: auto;
 }
 .design-toolbar-group { display: flex; align-items: center; gap: 4px; }
+/* O agrupador do canvas tem que ser flex ele tambem. Sem isso ele e um
+   div block dentro da barra: os filhos dele (ferramentas, toggles, zoom)
+   voltam a ser block e empilham, fazendo a barra ter tres vezes a altura
+   dela -- com os botoes encolhidos a esquerda e um vao vazio a direita. */
+.design-toolbar-canvas-only { display: flex; align-items: center; gap: 6px; }
 .design-toolbar-sep { width: 1px; height: 24px; background: var(--border); }
 .design-btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1749,7 +1754,6 @@ body.design-mode #sidebar-tab { display: none; }
 /* Na aba Codigo as ferramentas somem em vez de aceitar clique sem ter
    onde desenhar -- e o que o agrupador novo existe para fazer. */
 .design-toolbar.is-code .design-toolbar-canvas-only { display: none; }
-.design-toolbar.is-code .design-toolbar-canvas-only + .design-toolbar-sep { display: none; }
 
 .design-code {
   position: absolute; inset: 0;
@@ -1783,13 +1787,19 @@ body.design-mode #sidebar-tab { display: none; }
   border-color: var(--accent); background: var(--accent); color: #fff;
 }
 
+/* Duas linhas: as tres caixas de codigo lado a lado em cima, e o preview
+   ocupando a largura toda embaixo.
+
+   O preview embaixo, e nao ao lado, por causa da largura: e o que mais
+   precisa dela, porque um frame de celular tem ~390px e quatro colunas
+   iguais espremeriam tanto o codigo quanto a tela que ele mostra. */
 .design-code-grid {
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px;
+  display: grid; grid-template-rows: 1fr 1fr; gap: 12px;
 }
 .design-code-editor {
   min-width: 0; min-height: 0;
-  display: grid; grid-template-rows: 1fr 1fr 1fr; gap: 8px;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
 }
 .design-code-pane {
   min-height: 0; display: flex; flex-direction: column; gap: 4px;
@@ -1826,9 +1836,13 @@ body.design-mode #sidebar-tab { display: none; }
 @media (max-width: 1100px) {
   #controls-bar { right: 10px; }
   #workspace { padding-right: 70px; }
-  /* Codigo e preview sao lado a lado; abaixo disso um deles fica com
-     menos largura do que a menor tela util de uma tela de 320px. */
+  /* Tres caixas de codigo lado a lado ja pedem ~330px cada para o
+     indentado do HTML respirar; abaixo disso elas voltam a empilhar, com
+     o preview por baixo. Sao duas linhas do grid de fora (editor e
+     preview) -- as tres empilhadas sao linhas do grid de dentro. */
   .design-code-grid { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .design-code-editor { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr 1fr; }
+  .design-code-pane { min-height: 90px; }
 }
 
 @media (max-width: 900px) {
