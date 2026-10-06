@@ -126,7 +126,15 @@ export class UIPropertiesView {
         this._color(node.fill === 'none' ? '#ffffff' : node.fill, 'fill', 'Cor do preenchimento'),
         this._number(node.strokeWidth, 'strokeWidth', 'Espessura', { min: 0, step: 0.5 })
       ];
-      if (node.shapeType === 'rect') paint.push(this._number(node.radius, 'radius', 'Cantos', { min: 0 }));
+      if (node.shapeType === 'rect') {
+        // Um campo por canto: o que nao e arredondado fica em 90 graus.
+        paint.push(
+          this._number(node.radiusTl, 'radiusTl', 'Sup. esq.', { min: 0 }),
+          this._number(node.radiusTr, 'radiusTr', 'Sup. dir.', { min: 0 }),
+          this._number(node.radiusBr, 'radiusBr', 'Inf. dir.', { min: 0 }),
+          this._number(node.radiusBl, 'radiusBl', 'Inf. esq.', { min: 0 })
+        );
+      }
       this.body.appendChild(this._group('Forma', paint));
     }
 

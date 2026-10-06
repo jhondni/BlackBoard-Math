@@ -1,4 +1,5 @@
 import { UIText } from '../models/UIText.js';
+import { UIShape } from '../models/UIShape.js';
 
 /* ============================================
    UI/UX DESIGNER - UIDesignController
@@ -41,7 +42,7 @@ import { UIText } from '../models/UIText.js';
 
 /** Props que o painel atribui direto no no, sem passar por metodo. */
 const DIRECT_PROPS = [
-  'name', 'fill', 'stroke', 'strokeWidth', 'radius',
+  'name', 'fill', 'stroke', 'strokeWidth',
   'fontSize', 'fontFamily', 'color', 'align', 'lineHeight'
 ];
 
@@ -170,6 +171,16 @@ export class UIDesignController {
       node.setText(value);
     } else if (prop === 'shapeType' && node.type === 'shape') {
       node.setShapeType(value);
+    } else if (UIShape.CORNERS.includes(prop) && node.type === 'shape') {
+      const index = UIShape.CORNERS.indexOf(prop);
+      node.setRadius(prop, value);
+      // O painel so ressincroniza os campos que NAO estao em foco, e o
+      // canto que o usuario digita e justamente o em foco: sem isto o
+      // campo continuaria mostrando o numero pedido, e nao o raio que a
+      // figura de fato tem. Remontar o painel nao serve, porque
+      // roubaria o foco do campo.
+      const field = this.views.properties ? this.views.properties.getField(prop) : null;
+      if (field) field.value = Math.round(node.radii[index] * 100) / 100;
     } else if (prop === 'strokeEnabled' && node.type === 'shape') {
       node.stroke = value ? this._colorOf('stroke', '#1a1a1a') : 'none';
     } else if (prop === 'fillEnabled' && node.type === 'shape') {

@@ -329,11 +329,51 @@ export class UIDesignView {
       return;
     }
 
-    g.appendChild(el('rect', {
+    // Com os quatro cantos iguais, `rx`/`ry` resolvem tudo num
+    // `<rect>`. Quando algum canto destoa, o SVG nao tem atributo que
+    // faça isso: o retangulo vira um caminho com um arco por canto.
+    if (node.uniformRadii) {
+      g.appendChild(el('rect', {
+        ...paint,
+        x: n(node.x), y: n(node.y), width: n(node.width), height: n(node.height),
+        rx: n(node.radii[0]), ry: n(node.radii[0])
+      }, 'design-shape'));
+      return;
+    }
+
+    g.appendChild(el('path', {
       ...paint,
-      x: n(node.x), y: n(node.y), width: n(node.width), height: n(node.height),
-      rx: n(node.radius), ry: n(node.radius)
+      d: UIDesignView.roundedRectPath(node)
     }, 'design-shape'));
+  }
+
+  /**
+   * Caminho do retangulo com um arco por canto, no sentido horario a
+   * partir do canto superior esquerdo. Fica no espaco local da forma:
+   * a rotacao ja e um `transform` do grupo, e por isso nao entra aqui.
+   *
+   * @param {import('../models/UIShape.js').UIShape} node
+   * @returns {string} atributo `d`
+   */
+  static roundedRectPath(node) {
+    const [tl, tr, br, bl] = node.radii;
+    const x = n(node.x);
+    const y = n(node.y);
+    const right = n(node.x + node.width);
+    const bottom = n(node.y + node.height);
+
+    return [
+      'M', n(node.x + tl), y,
+      'H', n(node.x + node.width - tr),
+      'A', n(tr), n(tr), 0, 0, 1, right, n(node.y + tr),
+      'V', n(node.y + node.height - br),
+      'A', n(br), n(br), 0, 0, 1, n(node.x + node.width - br), bottom,
+      'H', n(node.x + bl),
+      'A', n(bl), n(bl), 0, 0, 1, x, n(node.y + node.height - bl),
+      'V', n(node.y + tl),
+      'A', n(tl), n(tl), 0, 0, 1, n(node.x + tl), y,
+      'Z'
+    ].join(' ');
   }
 
   _buildText(g, node) {
