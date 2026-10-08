@@ -1,4 +1,5 @@
 import { UIText } from '../models/UIText.js';
+import { UIFontCatalog } from '../renderers/UIFontCatalog.js';
 
 /* ============================================
    UI/UX DESIGNER - UIPropertiesView
@@ -25,6 +26,7 @@ export class UIPropertiesView {
     this.$ = $;
     this.body = null;
     this.renderedId = null;
+    this._fontsBtn = null;
 
     this.onChange = null;          // (prop, value) => void
     this.onCommit = null;          // () => void
@@ -161,7 +163,8 @@ export class UIPropertiesView {
       this.body.appendChild(this._group('Conteudo', [
         this._textarea(node.text, 'text', 'Texto')
       ]));
-      this.body.appendChild(this._group('Tipografia', [
+
+      const tipo = [
         this._number(node.fontSize, 'fontSize', 'Corpo', { min: 1 }),
         this._select(node.fontWeight, 'fontWeight', 'Peso', [
           { value: '300', label: 'Leve' },
@@ -170,17 +173,23 @@ export class UIPropertiesView {
           { value: '600', label: 'Semibold' },
           { value: '700', label: 'Bold' },
           { value: '800', label: 'Extrabold' }
-        ]),
-        this._select(node.fontFamily, 'fontFamily', 'Familia',
-          UIText.FONT_FAMILIES.map((font) => ({ value: font, label: font.split(',')[0].replace(/'/g, '') }))),
-        this._color(node.color, 'color', 'Cor'),
-        this._select(node.align, 'align', 'Alinhamento', [
-          { value: 'left', label: 'Esquerda' },
-          { value: 'center', label: 'Centro' },
-          { value: 'right', label: 'Direita' }
-        ]),
-        this._number(node.lineHeight, 'lineHeight', 'Entrelinha', { min: 0.6, max: 4, step: 0.1 })
+        ])
+      ];
+      // A familia vem sempre com a familia atual do no como primeira
+      // opcao, para arquivos antigos (stack de fallback como o padrao)
+      // continuarem mostrando o valor certo mesmo sem estar no catalogo.
+      tipo.push(this._select(node.fontFamily, 'fontFamily', 'Familia', this._fontOptions(node)));
+      tipo.push(this._color(node.color, 'color', 'Cor'));
+      tipo.push(this._select(node.align, 'align', 'Alinhamento', [
+        { value: 'left', label: 'Esquerda' },
+        { value: 'center', label: 'Centro' },
+        { value: 'right', label: 'Direita' }
       ]));
+      tipo.push(this._number(node.lineHeight, 'lineHeight', 'Entrelinha', { min: 0.6, max: 4, step: 0.1 }));
+
+      const control = this._fontsControl();
+      if (control) tipo.push(control);
+      this.body.appendChild(this._group('Tipografia', tipo));
     }
 
     const remove = document.createElement('button');
@@ -222,6 +231,76 @@ export class UIPropertiesView {
     if (prop === 'strokeEnabled') return node.stroke !== 'none';
     if (prop === 'fillEnabled') return node.fill !== 'none';
     return node[prop];
+  }
+
+  /* ---- Fontes do sistema ---- */
+
+  /**
+   * Opcoes do select de Familia: a familia atual do no na frente (ja
+   * carregada de arquivo, possivelmente um stack antigo) e depois as
+   * familias detectadas no computador -- ou a lista padrao enquanto o
+   * catalogo nao foi pedido. Cada opcao e rotulada com o proprio nome,
+   * e o select a desenha na fonte dela.
+   */
+  _fontOptions(node) {
+    const current = node.fontFamily || '';
+    const currentLabel = current.split(',')[0].replace(/['"]/g, '').trim() || '';
+    const catalog = UIFontCatalog.cached;
+    const names = catalog && catalog.families.length
+      ? catalog.families
+      : UIText.FONT_FAMILIES.map((stack) => stack.split(',')[0].replace(/['"]/g, '').trim());
+
+    const seen = new Set();
+    const options = [];
+    const add = (value, label) => {
+      if (!label || seen.has(label)) return;
+      seen.add(label);
+      options.push({ value, label, font: label });
+    };
+    add(current, currentLabel);
+    names.forEach((name) => add(name, name));
+    return options;
+  }
+
+  /**
+   * O controle de fontes do sistema, ou `null` quando nao cabe mostralo:
+   * botao de carregar enquanto nada foi pedido, contagem quando ja
+   * carregou, aviso quando a permissao foi negada -- e nenhum controle
+   * em navegador sem a API.
+   */
+  _fontsControl() {
+    const catalog = UIFontCatalog.cached;
+    if (catalog && catalog.source === 'local') {
+      const count = catalog.families.length;
+      return this._hint(count
+        ? count + ' fonte' + (count === 1 ? '' : 's') + ' do sistema carregada' + (count === 1 ? '' : 's')
+        : 'Nenhuma fonte do sistema encontrada.');
+    }
+    if (!UIFontCatalog.available()) return null;
+    if (catalog) {
+      return this._hint('Sem permissao para ver as fontes: usando a lista padrao.');
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'design-btn design-fonts-btn';
+    btn.textContent = 'Carregar fontes do sistema';
+    btn.title = 'Solicita a permissao para listar as fontes instaladas no computador';
+    btn.addEventListener('click', () => this._loadLocalFonts());
+    this._fontsBtn = btn;
+    return btn;
+  }
+
+  async _loadLocalFonts() {
+    const btn = this._fontsBtn;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Carregando...';
+    }
+    await UIFontCatalog.load();
+    // Repinta o painel: o select ganha as familias detectadas e o botao
+    // vira a contagem.
+    this.render(true);
   }
 
   _onFieldEvent(e) {
@@ -335,6 +414,9 @@ export class UIPropertiesView {
       const item = document.createElement('option');
       item.value = option.value;
       item.textContent = option.label;
+      // Rotulo desenhado na propria fonte: quem percorre a lista ve a
+      // familia sem abrir o menu de teste.
+      if (option.font) item.style.fontFamily = option.font;
       select.appendChild(item);
     });
     select.value = String(value);

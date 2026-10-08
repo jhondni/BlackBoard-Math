@@ -1566,7 +1566,11 @@ body.design-mode #sidebar-tab { display: none; }
   fill: var(--text-muted); font-family: var(--font-sans); font-size: 11px;
   pointer-events: none;
 }
-.design-text { font-family: var(--font-sans); white-space: pre; }
+/* Texto do design. Nao tem `font-family` aqui de proposito: ela viria do
+   `font-family` do no (UIDesignView._buildText) como atributo de
+   apresentacao, e uma regra de classe venceria o atributo -- trocar a
+   familia no painel de propriedades nao mudaria nada no canvas. */
+.design-text { white-space: pre; }
 
 /* ---- contorno de selecao ---- */
 .design-outline {
@@ -1644,6 +1648,14 @@ body.design-mode #sidebar-tab { display: none; }
   width: 100%; justify-content: center; margin-top: 4px;
   color: var(--danger); border-color: var(--danger-soft);
 }
+/* O botao de fontes do sistema vive dentro do grupo Tipografia, onde os
+   campos sao largura total: esticado, acompanha o select que ele povoia. */
+.design-fonts-btn {
+  width: 100%; justify-content: center;
+  border-color: var(--border); color: var(--text-secondary);
+}
+.design-fonts-btn:hover { border-color: var(--accent); color: var(--accent); }
+.design-fonts-btn:disabled { opacity: 0.55; cursor: wait; }
 
 /* ---- painel lateral ---- */
 #design-sidebar {
