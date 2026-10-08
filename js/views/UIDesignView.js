@@ -25,6 +25,8 @@
    listener.
    ============================================ */
 
+import { UIShape } from '../models/UIShape.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const GRID_PATTERN_ID = 'design-grid-pattern';
 
@@ -37,6 +39,9 @@ const MIN_DRAG_PX = 4;
 
 /** Shift durante a rotacao prende nos multiplos deste passo. */
 const ROTATION_STEP = 15;
+
+/** Distancia (px de tela) de um novo ponto ao primeiro que fecha a forma. */
+const POLYGON_CLOSE_PX = 8;
 
 /** Sensibilidade do zoom por roda com ctrl/cmd. */
 const WHEEL_ZOOM_FACTOR = 0.0015;
@@ -96,6 +101,11 @@ export class UIDesignView {
     this.gesture = null;
     this.spaceDown = false;
     this.imageNaturalSize = null;   // medida do arquivo, para o clique solto
+
+    // Sessao de desenho do poligono. Existe so enquanto a ferramenta
+    // Poligono esta ativa e o gesto ainda nao terminou; a cada clique um
+    // ponto e gravado e o duplo clique/Enter fecha a forma.
+    this.polygon = null;
 
     // Callbacks injetados pelo UIDesignController.
     this.onCreateNode = null;      // (tool, props) => void
@@ -169,6 +179,13 @@ export class UIDesignView {
   setTool(tool) {
     this.currentTool = tool;
     if (this.svg) this.svg.setAttribute('data-tool', tool);
+    if (tool === 'polygon') {
+      // Entrar na ferramenta abre uma sessao nova; qualquer sessao velha
+      // ja tinha sido descartada ao sair dela.
+      this.polygon = { points: [], hover: null };
+    } else {
+      this.polygon = null;
+    }
   }
 
   /**
@@ -363,6 +380,17 @@ export class UIDesignView {
       'stroke-width': n(node.strokeWidth)
     };
 
+    if (node.shapeType === 'polygon') {
+      // O contorno usa as arestas dos pontos; sem `stroke-linejoin` os
+      // cantos agudos de um poligono seriam cortados no desenho.
+      g.appendChild(el('polygon', {
+        ...paint,
+        points: UIDesignView.polygonPointsString(node),
+        'stroke-linejoin': 'round'
+      }, 'design-shape'));
+      return;
+    }
+
     if (node.shapeType === 'ellipse') {
       g.appendChild(el('ellipse', {
         ...paint,
@@ -403,8 +431,36 @@ export class UIDesignView {
     }, 'design-shape'));
   }
 
+/* ---- Poligono (pontos) ---- */
+
+  /** Os pontos do no em coordenadas de design. */
+  static polygonPoints(node) {
+    return (node.points || []).map((p) => ({ x: node.x + p.x, y: node.y + p.y }));
+  }
+
+  /** Atributo `points` do `<polygon>`: pares "x,y" separados por espaco. */
+  static polygonPointsString(node) {
+    return UIDesignView.polygonPoints(node)
+      .map((p) => n(p.x) + ',' + n(p.y))
+      .join(' ');
+  }
+
+  /** `d` de um caminho fechado passando pelos pontos. */
+  static polygonPath(pts) {
+    if (!Array.isArray(pts) || pts.length < 2) return '';
+    return 'M ' + pts.map((p) => n(p.x) + ' ' + n(p.y)).join(' L ') + ' Z';
+  }
+
   /**
-   * Caminho do retangulo com um arco por canto, no sentido horario a
+   * Caminho fechado do poligono de um no; usado no contorno de selecao
+   * (que acompanha as arestas, e nao a caixa).
+   */
+  static polygonNodePath(node) {
+    return UIDesignView.polygonPath(UIDesignView.polygonPoints(node));
+  }
+
+  /**
+   * Caminho fechado do retangulo com um arco por canto, no sentido horario a
    * partir do canto superior esquerdo. Fica no espaco local da forma:
    * a rotacao ja e um `transform` do grupo, e por isso nao entra aqui.
    *
@@ -483,6 +539,7 @@ export class UIDesignView {
     const gesture = this.gesture;
 
     if (gesture && gesture.type === 'create') this._drawCreatePreview(gesture);
+    if (this.polygon) this._drawPolygonSession(this.polygon);
 
     const selected = this.design.selected;
     if (selected && selected.visible) this._drawSelection(selected);
@@ -500,9 +557,20 @@ export class UIDesignView {
       g.setAttribute('transform', 'rotate(' + n(node.rotation) + ' ' + n(node.centerX) + ' ' + n(node.centerY) + ')');
     }
 
-    g.appendChild(el('rect', {
-      x: n(node.x), y: n(node.y), width: n(node.width), height: n(node.height)
-    }, 'design-outline'));
+    // Poligono: o contorno anda pelas arestas, e cada vertice mostra o
+    // angulo interno -- a forma e os angulos dela seguem juntos.
+    if (node.shapeType === 'polygon') {
+      g.appendChild(el('path', { d: UIDesignView.polygonNodePath(node) }, 'design-outline'));
+      const pts = UIDesignView.polygonPoints(node);
+      const total = pts.length;
+      for (let i = 0; i < total; i += 1) {
+        this._appendAngleLabel(g, pts[(i - 1 + total) % total], pts[i], pts[(i + 1) % total], zoom);
+      }
+    } else {
+      g.appendChild(el('rect', {
+        x: n(node.x), y: n(node.y), width: n(node.width), height: n(node.height)
+      }, 'design-outline'));
+    }
 
     RESIZE_DIRS.forEach((dir) => {
       const point = UIDesignView.handlePoint(node, dir);
@@ -570,6 +638,161 @@ export class UIDesignView {
     this.overlay.appendChild(g);
   }
 
+  /* ---- Sessao do poligono ----
+     A ferramenta Poligono nao usa o gesto de arrasto: cada clique grava um
+     ponto em `this.polygon.points`, e o duplo clique (ou Enter) fecha a
+     forma. Tudo que a sessao desenha vive neste overlay, somando aos nos. */
+
+  _drawPolygonSession(session) {
+    const zoom = this.design.zoom;
+    const pts = session.points;
+    const hover = session.hover;
+    const g = el('g', { class: 'design-polygon-session' });
+
+    if (pts.length >= 2) {
+      g.appendChild(el('path', {
+        d: 'M ' + pts.map((p) => n(p.x) + ' ' + n(p.y)).join(' L '),
+        fill: 'none'
+      }, 'design-preview-shape'));
+    }
+
+    const last = pts.length ? pts[pts.length - 1] : null;
+    if (last && hover && (hover.x !== last.x || hover.y !== last.y)) {
+      // O segmento do cursor: mostra onde o proximo clique vai entrar.
+      g.appendChild(el('line', {
+        x1: n(last.x), y1: n(last.y), x2: n(hover.x), y2: n(hover.y)
+      }, 'design-preview-shape design-preview-live'));
+    }
+
+    const radius = 3.2 / zoom;
+    pts.forEach((p) => {
+      g.appendChild(el('circle', {
+        cx: n(p.x), cy: n(p.y), r: n(radius)
+      }, 'design-polygon-vertex'));
+    });
+
+    // Angulo ao vivo: em cada ponto ja gravado com dois vizinhos (o
+    // anterior e o cursor no ultimo), o topo do canto mostra os graus.
+    const all = hover ? pts.concat([hover]) : pts.slice();
+    for (let i = 1; i < all.length - 1; i += 1) {
+      this._appendAngleLabel(g, all[i - 1], all[i], all[i + 1], zoom);
+    }
+
+    const first = pts.length ? pts[0] : null;
+    if (pts.length >= 2 && first) {
+      const hint = el('text', {
+        x: n(first.x), y: n(first.y - 16 / zoom), 'text-anchor': 'middle'
+      }, 'design-hint');
+      hint.textContent = pts.length < 3 ? '3+ pontos, depois duplo clique' : 'duplo clique fecha';
+      g.appendChild(hint);
+    }
+
+    this.overlay.appendChild(g);
+  }
+
+  /** Rotulo do angulo no vertice `b` (entre `a` e `c`), num offset na
+      direcao da bissetriz para nao ficar em cima da aresta. */
+  _appendAngleLabel(g, a, b, c, zoom, className = 'design-angle') {
+    const angle = UIShape.angleBetween(a, b, c);
+    if (!angle) return;
+
+    const d1 = { x: a.x - b.x, y: a.y - b.y };
+    const d2 = { x: c.x - b.x, y: c.y - b.y };
+    const l1 = Math.hypot(d1.x, d1.y) || 1;
+    const l2 = Math.hypot(d2.x, d2.y) || 1;
+    const ux = d1.x / l1 + d2.x / l2;
+    const uy = d1.y / l1 + d2.y / l2;
+    const lu = Math.hypot(ux, uy) || 1;
+    const off = (className === 'design-angle' ? 13 : 15) / zoom;
+
+    const label = el('text', {
+      x: n(b.x + ux / lu * off),
+      y: n(b.y + uy / lu * off) + 4 / zoom,
+      'text-anchor': 'middle',
+      'font-size': n(11 / zoom)
+    }, className);
+    label.textContent = Math.round(angle) + '\u00B0';
+    g.appendChild(label);
+  }
+
+  /* ---- Fim da sessao ---- */
+
+  /**
+   * Um clique solto no canvas com a ferramenta Poligono grava o vertice.
+   * No duplo clique, os dois cliques do par gravam dois vertices quase
+   * no mesmo lugar; o `_onDblClick` limpa o primeiro e fecha a forma.
+   */
+  _polygonUp(e) {
+    this._release(e);
+
+    const point = this._clientToDesign(e);
+    const snapped = this._snapPointToGrid(point);
+    const session = this.polygon;
+    const placed = { x: n(snapped.x), y: n(snapped.y) };
+
+    session.points.push(placed);
+
+    // Clicar no primeiro vertice fecha a forma (colando o ultimo vertice
+    // no primeiro), um atalho para quem prefere fechar por precisao.
+    if (session.points.length >= 3 && this._nearFirstPoint(placed)) {
+      const first = session.points[0];
+      session.points[session.points.length - 1] = { x: first.x, y: first.y };
+      this._finishPolygon();
+      return;
+    }
+
+    this._renderOverlay();
+  }
+
+  /** Vertice na grade quando o encaixe esta ligado. */
+  _snapPointToGrid(point) {
+    if (!this.design.snap) return point;
+    const step = this.design.gridSize;
+    return {
+      x: Math.round(point.x / step) * step,
+      y: Math.round(point.y / step) * step
+    };
+  }
+
+  _nearFirstPoint(point) {
+    const first = this.polygon.points[0];
+    if (!first) return false;
+    return Math.hypot(point.x - first.x, point.y - first.y) * this.design.zoom <= POLYGON_CLOSE_PX;
+  }
+
+  /** Fecha a forma: entrega os pontos ao controller como um node novo. */
+  _finishPolygon() {
+    const pts = this.polygon ? this.polygon.points.slice() : [];
+    this.polygon = null;
+    if (pts.length < 3) return;
+    this._renderOverlay();
+    if (this.onCreateNode) {
+      this.onCreateNode('polygon', { points: pts.map((p) => ({ x: p.x, y: p.y })) });
+    }
+  }
+
+  /** Chamado pelo controller (Enter). */
+  finishPolygon() {
+    if (this.polygon && this.polygon.points.length >= 3) this._finishPolygon();
+  }
+
+  /** Chamado pelo controller (Esc, troca de ferramenta). */
+  cancelPolygon() {
+    this.polygon = null;
+    this._renderOverlay();
+  }
+
+  /** Backspace durante o desenho: remove o ultimo vertice, nao o node. */
+  popPolygonPoint() {
+    if (!this.polygon) return;
+    this.polygon.points.pop();
+    this._renderOverlay();
+  }
+
+  isDrawingPolygon() {
+    return Boolean(this.polygon);
+  }
+
   _drawSnapLines(lines) {
     const view = this._viewport();
     const g = el('g', { class: 'design-snap' });
@@ -626,6 +849,17 @@ export class UIDesignView {
     }
 
     if (e.button !== 0) return;
+
+    if (this.currentTool === 'polygon') {
+      // Nao e arastar: o clique grava o vertice no `pointerup`; aqui so
+      // se marca onde o cursor esta, para o segmento fantasma aparecer.
+      this.polygon = this.polygon || { points: [], hover: null };
+      this.polygon.hover = this._clientToDesign(e);
+      this._capture(e);
+      e.preventDefault();
+      this._renderOverlay();
+      return;
+    }
 
     if (this.currentTool !== 'select') {
       const start = this._clientToDesign(e);
@@ -710,6 +944,15 @@ export class UIDesignView {
   }
 
   _onPointerMove(e) {
+    // Sessao de poligono (sem gesto de pan ativo): so o cursor muda (o
+    // segmento fantasma do ultimo ponto ate aqui). O ponto em si nasce no
+    // `pointerup`.
+    if (this.polygon && !this.gesture) {
+      this.polygon.hover = this._clientToDesign(e);
+      this._renderOverlay();
+      return;
+    }
+
     const gesture = this.gesture;
     if (!gesture) return;
 
@@ -734,6 +977,19 @@ export class UIDesignView {
   }
 
   _onPointerUp(e) {
+    // Um solto durante a sessao de poligono grava o vertice -- mas nao
+    // quando o gesto era pan (espaco premido), que solta aqui tambem.
+    // O `pointercancel` (toque, por exemplo) so solta a captura: um
+    // vertice nao nasce de um gesto interrompido.
+    if (this.polygon && !this.gesture) {
+      if (e.type === 'pointerup') this._polygonUp(e);
+      else {
+        this._release(e);
+        this._renderOverlay();
+      }
+      return;
+    }
+
     const gesture = this.gesture;
     if (!gesture) return;
 
@@ -886,6 +1142,23 @@ export class UIDesignView {
 
   /** Duplo clique no texto: quem edita o conteudo e o painel de propriedades. */
   _onDblClick(e) {
+    // Poligono armado: o duplo clique fecha a forma. Os dois cliques do par
+    // gravaram dois vertices quase colados; o primeiro era o "abraço" do
+    // duplo clique, entao sobra o ultimo como vertice de fechamento.
+    if (this.polygon) {
+      e.preventDefault();
+      const pts = this.polygon.points;
+      if (pts.length >= 2) {
+        const penult = pts[pts.length - 2];
+        const last = pts[pts.length - 1];
+        if (Math.hypot(last.x - penult.x, last.y - penult.y) * this.design.zoom <= POLYGON_CLOSE_PX * 3) {
+          pts.splice(pts.length - 2, 1);
+        }
+      }
+      if (pts.length >= 3) this._finishPolygon();
+      return;
+    }
+
     const host = e.target.closest('[data-node-id]');
     const node = host ? this.design.getNode(host.getAttribute('data-node-id')) : null;
     if (!node || node.locked || node.type !== 'text') return;

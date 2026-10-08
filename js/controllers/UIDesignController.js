@@ -46,7 +46,7 @@ const DIRECT_PROPS = [
   'fontSize', 'fontFamily', 'color', 'align', 'lineHeight'
 ];
 
-const TOOL_KEYS = { v: 'select', f: 'frame', r: 'rect', o: 'ellipse', l: 'line', t: 'text', i: 'image' };
+const TOOL_KEYS = { v: 'select', f: 'frame', r: 'rect', o: 'ellipse', l: 'line', t: 'text', i: 'image', p: 'polygon' };
 
 export class UIDesignController {
   constructor(design, views, $) {
@@ -425,7 +425,13 @@ export class UIDesignController {
     const key = e.key.toLowerCase();
     let handled = true;
 
-    if (key === 'delete' || key === 'backspace') this.removeSelected();
+    if ((key === 'delete' || key === 'backspace')
+        && this.views.designView && this.views.designView.isDrawingPolygon()) {
+      // Durante o desenho do poligono, apagar remove o ultimo vertice; a
+      // mesma tecla, fora da sessao, remove o node selecionado.
+      this.views.designView.popPolygonPoint();
+    }
+    else if (key === 'delete' || key === 'backspace') this.removeSelected();
     // Escape cancela a imagem armada antes de qualquer outra coisa: sem
     // isso o arquivo ficaria esperando o proximo arrasto, em qualquer
     // canto do canvas, muito depois de o usuario ter desistido.
@@ -433,10 +439,19 @@ export class UIDesignController {
       if (this.pendingImage) {
         this._discardPendingImage();
         this.setTool('select');
+      } else if (this.views.designView && this.views.designView.isDrawingPolygon()) {
+        // Poligono a meio: Esc descarta a sessao e volta para Selecionar.
+        this.views.designView.cancelPolygon();
+        this.setTool('select');
       } else {
         this.design.deselectAll();
       }
       this.render();
+    }
+    // Enter fecha a forma em construção, sem depender do duplo clique.
+    else if (key === 'enter' && this.views.designView && this.views.designView.isDrawingPolygon()) {
+      this.views.designView.finishPolygon();
+      handled = true;
     }
     else if (key.indexOf('arrow') === 0) this._nudge(key, e);
     else if (TOOL_KEYS[key] && !e.ctrlKey && !e.metaKey) this.setTool(TOOL_KEYS[key]);

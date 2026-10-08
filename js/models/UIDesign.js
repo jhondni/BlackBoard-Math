@@ -100,7 +100,7 @@ export class UIDesign {
     if (type === 'frame') return new UIFrame(props);
     if (type === 'image') return new UIImage(props);
     if (type === 'text') return new UIText(props);
-    if (type === 'rect' || type === 'ellipse' || type === 'line') {
+    if (type === 'rect' || type === 'ellipse' || type === 'line' || type === 'polygon') {
       return new UIShape({ ...props, shapeType: type });
     }
     if (type === 'shape') return new UIShape(props);

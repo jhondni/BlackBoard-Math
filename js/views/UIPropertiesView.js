@@ -120,7 +120,8 @@ export class UIPropertiesView {
         this._select(node.shapeType, 'shapeType', 'Forma', [
           { value: 'rect', label: 'Retangulo' },
           { value: 'ellipse', label: 'Elipse' },
-          { value: 'line', label: 'Linha' }
+          { value: 'line', label: 'Linha' },
+          { value: 'polygon', label: 'Poligono' }
         ]),
         this._checkbox(node.stroke !== 'none', 'strokeEnabled', 'Contorno'),
         this._color(node.stroke === 'none' ? '#1a1a1a' : node.stroke, 'stroke', 'Cor do contorno'),
@@ -136,6 +137,9 @@ export class UIPropertiesView {
           this._number(node.radiusBr, 'radiusBr', 'Inf. dir.', { min: 0 }),
           this._number(node.radiusBl, 'radiusBl', 'Inf. esq.', { min: 0 })
         );
+      }
+      if (node.shapeType === 'polygon') {
+        paint.push(this._hint((node.points || []).length + ' vertices, redimensionamento em escala'));
       }
       this.body.appendChild(this._group('Forma', paint));
     }

@@ -126,6 +126,10 @@ export class DesignCodeRenderer {
         // O desenho e um `<i>` dentro da caixa; a caixa em si fica vazia
         // para o giro e a medida baterem com o resto.
         box.push('pointer-events: none');
+      } else if (node.shapeType === 'polygon') {
+        // A tinta mora no `<svg>` do HTML, nao aqui: `clip-path` nao
+        // desenharia o contorno, e um poligono sem contorno fala menos.
+        box.push('display: block');
       } else {
         // Os quatro cantos sao a mesma ordem do CSS, o que faz o
         // `radii` do modelo virar uma regra e nao quatro.
@@ -133,7 +137,7 @@ export class DesignCodeRenderer {
         box.push('background: ' + node.fill);
       }
 
-      if (node.shapeType !== 'line' && node.stroke !== 'none') {
+      if (node.shapeType !== 'line' && node.shapeType !== 'polygon' && node.stroke !== 'none') {
         box.push('border: ' + px(node.strokeWidth) + ' solid ' + node.stroke);
         box.push('box-sizing: border-box');
       }
@@ -258,7 +262,32 @@ export class DesignCodeRenderer {
     if (node.type === 'shape' && node.shapeType === 'line') {
       return '<div class="' + cls + '"><i></i></div>';
     }
+    if (node.type === 'shape' && node.shapeType === 'polygon') {
+      return DesignCodeRenderer.polygonHtml(node, cls);
+    }
     return '<div class="' + cls + '"></div>';
+  }
+
+  /**
+   * O poligono vira um SVG embutido no lugar do `<div>`: so assim o
+   * contorno acompanha as arestas (CSS nao tem como desenhar um poligono
+   * com contorno), e o `viewBox` da caixa do no faz o CSS continuar
+   * mandando na posicao/tamanho pelo `.nX`.
+   */
+  static polygonHtml(node, cls) {
+    const pts = (node.points || []).map((p) => DesignCodeRenderer.coord(p.x) + ',' + DesignCodeRenderer.coord(p.y)).join(' ');
+    const paint = 'fill="' + esc(node.fill) + '"';
+    const stroke = node.stroke !== 'none'
+      ? ' stroke="' + esc(node.stroke) + '" stroke-width="' + DesignCodeRenderer.coord(node.strokeWidth) + '" stroke-linejoin="round"'
+      : '';
+    return '<svg class="' + cls + '" viewBox="0 0 '
+      + DesignCodeRenderer.coord(node.width) + ' ' + DesignCodeRenderer.coord(node.height) + '">'
+      + '<polygon points="' + pts + '" ' + paint + stroke + '/></svg>';
+  }
+
+  /** Numero puro (sem `px`), para coordenadas dentro do SVG. */
+  static coord(value) {
+    return String(Math.round(Number(value) * 100) / 100);
   }
 
   static semanticClass(node) {

@@ -18,6 +18,7 @@ const ICONS = {
   rect: '<rect x="4" y="6" width="16" height="12" rx="2" fill="currentColor"/>',
   ellipse: '<ellipse cx="12" cy="12" rx="8" ry="6" fill="currentColor"/>',
   line: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 19L19 5"/>',
+  polygon: '<path fill="currentColor" d="M12 4l6.6 4.8-2.5 7.7H7.9l-2.5-7.7z"/>',
   text: '<path fill="currentColor" d="M5 4v3h5.5v12h3V7H19V4H5z"/>',
   // Montura com o horizonte e o sol: e o que distingue "imagem" de
   // "retangulo", que ja tem icone proprio e e a mesma coisa sem o miolo.
@@ -47,6 +48,7 @@ export class UIDesignToolbarView {
       'dtool-rect': 'rect',
       'dtool-ellipse': 'ellipse',
       'dtool-line': 'line',
+      'dtool-polygon': 'polygon',
       'dtool-text': 'text',
       'dtool-image': 'image'
     };
@@ -96,6 +98,7 @@ export class UIDesignToolbarView {
       this._toolButton('dtool-rect', 'rect', 'Retangulo (R)'),
       this._toolButton('dtool-ellipse', 'ellipse', 'Elipse (O)'),
       this._toolButton('dtool-line', 'line', 'Linha (L)'),
+      this._toolButton('dtool-polygon', 'polygon', 'Poligono (P)'),
       this._toolButton('dtool-text', 'text', 'Texto (T)'),
       this._toolButton('dtool-image', 'image', 'Imagem (I)')
     ]));

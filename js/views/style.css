@@ -1544,6 +1544,7 @@ body.design-mode #sidebar-tab { display: none; }
 #design-svg[data-tool="rect"],
 #design-svg[data-tool="ellipse"],
 #design-svg[data-tool="line"],
+#design-svg[data-tool="polygon"],
 #design-svg[data-tool="text"],
 #design-svg[data-tool="image"] { cursor: crosshair; }
 #design-svg[data-tool="select"] { cursor: default; }
@@ -1599,6 +1600,29 @@ body.design-mode #sidebar-tab { display: none; }
      guia (ambar) nem com selecao (acento). */
   stroke: #e84393; stroke-width: 1; pointer-events: none;
   vector-effect: non-scaling-stroke;
+}
+
+/* ---- poligono (desenho ponto a ponto) ---- */
+.design-polygon-vertex {
+  fill: var(--accent); stroke: var(--bg-surface); stroke-width: 1;
+  pointer-events: none;
+}
+.design-preview-live {
+  /* O segmento "fantasma" do cursor durante o desenho: mais claro que a
+     parte ja confirmada, para nao parecer um canto a mais. */
+  stroke: var(--accent-soft); stroke-dasharray: 2 3;
+}
+/* A polilinha em construcao nunca preenche: o CSS da classe `design-preview-shape`
+   pintaria a area fechada implicitamente, e o desenho ainda esta aberto. */
+.design-polygon-session path { fill: none; }
+.design-angle {
+  fill: var(--accent); font-family: var(--font-sans); font-weight: 600;
+  paint-order: stroke; stroke: var(--bg-surface); stroke-width: 0.6;
+  pointer-events: none;
+}
+.design-hint {
+  fill: var(--text-muted); font-family: var(--font-sans); font-size: 10px;
+  pointer-events: none;
 }
 
 .design-handle.dir-nw, .design-handle.dir-se { cursor: nwse-resize; }
