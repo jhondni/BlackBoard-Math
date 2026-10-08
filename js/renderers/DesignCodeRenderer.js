@@ -7,17 +7,26 @@
    Isso e um gerador, nao um estado: recebe o design
    e devolve texto. Nao guarda nada, nao desenha
    nada, e nao depende do DOM. Por isso o mesmo
-   arquivo serve para o preview (que monta o texto
-   num `<iframe>`) e para o botao de baixar.
+   arquivo serve para as tres caixas da aba Codigo e
+   para o botao de baixar.
 
    ---- O que pertence a tela de um frame ----
 
    O modelo nao tem pai e filho: `UIDesign.nodes` e
    uma lista plana, e o proprio `UIFrame` avisa que a
    pertinencia a um frame ainda nao faz parte do
-   MVP. A regra aqui e GEOMETRICA: um no pertence ao
-   frame que o contem por inteiro, e quando ha frame
-   dentro de frame, vale o mais interno.
+   MVP. A regra aqui e GEOMETRICA, e o arquivo baixado
+   e so o frame:
+
+   - quem esta inteiro dentro de um frame pertence a
+     ele, e quando ha frame dentro de frame vale o mais
+     interno;
+   - quem cruza a borda pertence ao frame onde mais
+     cabe, e a tela o recorta com `overflow: hidden` --
+     entra no codigo, mas sai cortado, so com a parte
+     de dentro;
+   - quem nao toca nenhum frame nao entra em nenhum
+     arquivo.
 
    O preco dessa escolha, que vale mais que ela: e um
    palpite espacial, nao uma hierarquia. Mover um no
@@ -33,10 +42,13 @@
    de outro tem coordenada do canvas, e nao do frame
    que o contem. Entao o codigo gerado e chato: todo
    elemento e filho direto da tela, com `left`/`top`
-   absolutos, exatamente como o SVG os desenha. Aninhar
-   de verdade exigiria subtrair a origem do pai a cada
-   medida -- e um erro de um pixel que so apareceria
-   com frame dentro de frame.
+   calculados na origem do .screen -- o canto do frame
+   em questao e subtraido de cada medida (`cssFor`
+   recebe a origem). E o que faz o que o canvas mostra
+   dentro do frame continuar dentro do .screen quando o
+   frame nao esta em (0,0). Hierarquia de pai de verdade
+   so viria com frame dentro de frame usando o mais
+   externo, e nada aqui precisa disso agora.
    ============================================ */
 
 /** Escapa texto que vai para dentro de um atributo ou entre tags. */
@@ -68,16 +80,49 @@ export class DesignCodeRenderer {
       && inner.y + inner.height <= outer.y + outer.height;
   }
 
+  /** As caixas se sobrepoe? Borda so encostando nao conta. */
+  static intersects(a, b) {
+    return a.x < b.x + b.width
+      && b.x < a.x + a.width
+      && a.y < b.y + b.height
+      && b.y < a.y + a.height;
+  }
+
+  /** Area da intersecao das duas caixas, em px de design. */
+  static overlapArea(a, b) {
+    const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+    return w > 0 && h > 0 ? w * h : 0;
+  }
+
   /**
-   * O frame mais interno que contem o no inteiro, ou `null` se ele nao
-   * esta dentro de nenhum. "Mais interno" e o de menor area entre os que
-   * contem -- area, e nao ordem na lista, porque a lista e o z.
+   * O frame a que o no pertence, ou `null` se ele nao toca nenhum.
+   *
+   * Vale inteiro antes de valer em parte: quem esta 100% dentro de um
+   * frame e do mais interno (menor area entre os que o contem -- area, e
+   * nao ordem na lista, porque a lista e o z). So quem nao esta inteiro
+   * em lugar nenhum cai no desempate por sobreposicao, com o maior pedaco
+   * de si dentro do frame; empatado, fica o primeiro da lista, para o
+   * codigo nao depender do acaso.
    */
   static innermostFrame(design, node) {
+    const frames = DesignCodeRenderer.frames(design).filter((frame) => frame !== node);
+
     let best = null;
-    for (const frame of DesignCodeRenderer.frames(design)) {
-      if (frame === node || !DesignCodeRenderer.contains(frame, node)) continue;
+    for (const frame of frames) {
+      if (!DesignCodeRenderer.contains(frame, node)) continue;
       if (!best || frame.width * frame.height < best.width * best.height) best = frame;
+    }
+    if (best) return best;
+
+    let bestArea = 0;
+    for (const frame of frames) {
+      if (!DesignCodeRenderer.intersects(frame, node)) continue;
+      const area = DesignCodeRenderer.overlapArea(frame, node);
+      if (area > bestArea) {
+        best = frame;
+        bestArea = area;
+      }
     }
     return best;
   }
@@ -97,13 +142,19 @@ export class DesignCodeRenderer {
    * `<div style="...">` nao serve para isso. A classe do no (`n1`, `n2`)
    * e o vinculo com o HTML; o nome semantico (`type-text`, `shape-rect`)
    * e o que da para estilizar de novo.
+   *
+   * As coordenadas sao do DESIGN, nao do pai -- entao `origin` subtrai o
+   * canto do frame: o que o canvas mostra dentro do frame muda de
+   * lugar para a origem do `.screen`, senao o codigo sairia deslocado
+   * quando o frame nao esta em (0,0).
    */
-  static cssFor(node, index) {
+  static cssFor(node, index, origin) {
+    const o = origin || {};
     const sel = '.n' + index;
     const box = [
       'position: absolute',
-      'left: ' + px(node.x),
-      'top: ' + px(node.y),
+      'left: ' + px(node.x - (o.x || 0)),
+      'top: ' + px(node.y - (o.y || 0)),
       'width: ' + px(node.width),
       'height: ' + px(node.height)
     ];
@@ -160,8 +211,10 @@ export class DesignCodeRenderer {
     }
 
     // No invisivel: o elemento continua no codigo, com `display: none`.
-    // E o que permite o botao de visibilidade do preview mostra-lo de
-    // novo -- um no que sumisse do HTML nao teria como voltar.
+    // Ele esta dentro do frame, entao pertence a tela; so nao aparece,
+    // como nao aparece no canvas. E a ultima regra da lista de propriedades
+    // de proposito: `display: none` tem de vencer o `display: block` da
+    // imagem acima.
     if (node.visible === false) box.push('display: none');
 
     return sel + ' {\n  ' + box.join(';\n  ') + ';\n}';
@@ -205,44 +258,27 @@ export class DesignCodeRenderer {
   }
 
   static baseCss(frame) {
+    // O `.screen` e o proprio frame: o fundo dele (o `background` do
+    // model) tem de vir aqui, porque o frame em questao nao entra em
+    // `contentsOf` -- ele e a tela, nao um elemento dentro dela.
+    //
+    // A pagina e o frame, e mais nada: sem padding, sem cor de fundo e
+    // sem sombra de artboard, que sao moldura da aplicacao e nao do que
+    // foi desenhado. `overflow: hidden` e o que cumpre a promessa do
+    // arquivo -- so o que esta dentro do frame -- recortando o no que
+    // cruza a borda. O `clipContent` do model nao e consultado aqui:
+    // desligado, ele deixaria vazar para fora justamente o que o
+    // arquivo promete nao conter.
     return [
       'body {',
       '  margin: 0;',
-      '  padding: 24px;',
-      '  background: #ececf1;',
-      '  font-family: system-ui, sans-serif;',
       '}',
       '.screen {',
       '  position: relative;',
       '  width: ' + px(frame.width) + ';',
       '  height: ' + px(frame.height) + ';',
-      '  margin: 0 auto;',
+      '  background: ' + frame.background + ';',
       '  overflow: hidden;',
-      '  box-shadow: 0 2px 12px rgba(0, 0, 0, .18);',
-      '}',
-      '.toggles {',
-      '  display: flex;',
-      '  flex-wrap: wrap;',
-      '  gap: 6px;',
-      '  max-width: ' + px(frame.width) + ';',
-      '  margin: 0 auto 12px;',
-      '  padding: 0;',
-      '  list-style: none;',
-      '}',
-      '.toggles button {',
-      '  font: inherit;',
-      '  font-size: 12px;',
-      '  padding: 3px 9px;',
-      '  border: 1px solid #c9c9d4;',
-      '  border-radius: 999px;',
-      '  background: #fff;',
-      '  color: #4a4a55;',
-      '  cursor: pointer;',
-      '}',
-      '.toggles button[aria-pressed="false"] {',
-      '  background: #d9d9e2;',
-      '  color: #8a8a96;',
-      '  text-decoration: line-through;',
       '}'
     ].join('\n');
   }
@@ -251,21 +287,25 @@ export class DesignCodeRenderer {
 
   static htmlFor(node, index) {
     const cls = 'n' + index + ' ' + DesignCodeRenderer.semanticClass(node);
+    // O `id` e o mesmo `nX` das classes: e a ancora de quem for escrever
+    // JavaScript proprio na aba Codigo (`document.getElementById` ja o
+    // acha), e o que os nos de fora do frame nunca teriam.
+    const id = 'n' + index;
     if (node.type === 'text') {
-      return '<div class="' + cls + '">' + esc(node.text) + '</div>';
+      return '<div class="' + cls + '" id="' + id + '">' + esc(node.text) + '</div>';
     }
     if (node.type === 'image') {
       // `alt` vazio e o correto: a imagem e decorativa aqui, e um `alt`
       // inventado seria lido em voz alta por um leitor de tela.
-      return '<img class="' + cls + '" src="' + esc(node.src) + '" alt="">';
+      return '<img class="' + cls + '" id="' + id + '" src="' + esc(node.src) + '" alt="">';
     }
     if (node.type === 'shape' && node.shapeType === 'line') {
-      return '<div class="' + cls + '"><i></i></div>';
+      return '<div class="' + cls + '" id="' + id + '"><i></i></div>';
     }
     if (node.type === 'shape' && node.shapeType === 'polygon') {
-      return DesignCodeRenderer.polygonHtml(node, cls);
+      return DesignCodeRenderer.polygonHtml(node, cls, id);
     }
-    return '<div class="' + cls + '"></div>';
+    return '<div class="' + cls + '" id="' + id + '"></div>';
   }
 
   /**
@@ -274,13 +314,13 @@ export class DesignCodeRenderer {
    * com contorno), e o `viewBox` da caixa do no faz o CSS continuar
    * mandando na posicao/tamanho pelo `.nX`.
    */
-  static polygonHtml(node, cls) {
+  static polygonHtml(node, cls, id) {
     const pts = (node.points || []).map((p) => DesignCodeRenderer.coord(p.x) + ',' + DesignCodeRenderer.coord(p.y)).join(' ');
     const paint = 'fill="' + esc(node.fill) + '"';
     const stroke = node.stroke !== 'none'
       ? ' stroke="' + esc(node.stroke) + '" stroke-width="' + DesignCodeRenderer.coord(node.strokeWidth) + '" stroke-linejoin="round"'
       : '';
-    return '<svg class="' + cls + '" viewBox="0 0 '
+    return '<svg class="' + cls + '" id="' + id + '" viewBox="0 0 '
       + DesignCodeRenderer.coord(node.width) + ' ' + DesignCodeRenderer.coord(node.height) + '">'
       + '<polygon points="' + pts + '" ' + paint + stroke + '/></svg>';
   }
@@ -295,67 +335,35 @@ export class DesignCodeRenderer {
     return 'type-' + node.type;
   }
 
-  static html(frame, contents) {
-    // Os botoes de visibilidade vem ANTES da tela: o CSS deles tem
-    // `margin-bottom`, o que so faz sentido em cima. O `.screen` e
-    // posicionado, entao a ordem no fluxo nao afeta o desenho.
-    const parts = [];
-    const toggles = DesignCodeRenderer.togglesHtml(contents);
-    if (toggles) parts.push(toggles);
-
-    parts.push('<div class="screen" id="screen">');
+  /**
+   * A tela e so o frame e o que esta dentro dele: nada de botoes de
+   * visibilidade nem de roupa da aplicacao por cima -- o arquivo baixado
+   * tem de ser o desenho, e mais nada.
+   */
+  static html(contents) {
+    const parts = ['<div class="screen" id="screen">'];
     contents.forEach((node, i) => parts.push('  ' + DesignCodeRenderer.htmlFor(node, i + 1)));
     parts.push('</div>');
     return parts.join('\n');
   }
 
-  /** Um botao por no: o "olho" das camadas, virando controle do preview. */
-  static togglesHtml(contents) {
-    if (!contents.length) return '';
-    const items = contents.map((node, i) => {
-      const on = node.visible !== false;
-      return '      <li><button type="button" data-target="n' + (i + 1) + '"'
-        + ' aria-pressed="' + (on ? 'true' : 'false') + '">'
-        + esc(node.name) + '</button></li>';
-    }).join('\n');
-    return '    <ul class="toggles">\n' + items + '\n    </ul>';
-  }
-
-  /* ---- JavaScript ---- */
-
-  /**
-   * O minimo que o modulo sabe fazer: mostrar e esconder. O olho das
-   * camadas vira o botao, e o `display: none` que o no ja nasceu com no
-   * Design e o estado inicial. Nenhuma interacao e inventada aqui -- o
-   * que o design nao sabe fazer, o codigo gerado tambem nao.
-   */
-  static js() {
-    return [
-      'document.querySelectorAll(".toggles button").forEach(function (botao) {',
-      '  botao.addEventListener("click", function () {',
-      '    var alvo = document.getElementById(botao.dataset.target);',
-      '    if (!alvo) return;',
-      '    var visivel = alvo.style.display !== "none";',
-      '    // `""` em vez de "block": devolve a decisao ao CSS do no, e o',
-      '    // estado inicial do Design continua valendo.',
-      '    alvo.style.display = visivel ? "none" : "";',
-      '    botao.setAttribute("aria-pressed", String(!visivel));',
-      '  });',
-      '});'
-    ].join('\n');
-  }
-
   /* ---- A pagina inteira ---- */
 
   /**
+   * O JavaScript vem vazio de proposito: o modulo nao inventa
+   * interacao que o design nao tem. A caixa da aba Codigo e onde a
+   * pessoa escreve a dela, e so o que estiver escrito la vai para o
+   * arquivo.
+   *
    * @param {object} frame - o frame que virou tela
    * @param {Array} contents - os nos da tela (`contentsOf`)
    * @returns {{title: string, html: string, css: string, js: string}}
    */
   static screenFor(frame, contents) {
+    const origin = { x: frame.x, y: frame.y };
     const rules = contents.map((node, i) => {
       const index = i + 1;
-      const base = DesignCodeRenderer.cssFor(node, index);
+      const base = DesignCodeRenderer.cssFor(node, index, origin);
       return node.type === 'shape' && node.shapeType === 'line'
         ? base + '\n' + DesignCodeRenderer.lineCss(node, index)
         : base;
@@ -367,15 +375,16 @@ export class DesignCodeRenderer {
 
     return {
       title: frame.name,
-      html: DesignCodeRenderer.html(frame, contents),
+      html: DesignCodeRenderer.html(contents),
       css,
-      js: contents.length ? DesignCodeRenderer.js() : ''
+      js: ''
     };
   }
 
   /** O arquivo que o botao de baixar entrega: um so, com style e script dentro. */
   static document(screen) {
-    return [
+    const js = String(screen.js || '').trim();
+    const parts = [
       '<!DOCTYPE html>',
       '<html lang="pt-BR">',
       '<head>',
@@ -387,14 +396,13 @@ export class DesignCodeRenderer {
       '</style>',
       '</head>',
       '<body>',
-      screen.html,
-      '<script>',
-      screen.js,
-      '</script>',
-      '</body>',
-      '</html>',
-      ''
-    ].join('\n');
+      screen.html
+    ];
+    // Sem JavaScript escrito nao ha porque emitir um `<script>` vazio:
+    // ele so acrescentaria uma linha em branco ao arquivo.
+    if (js) parts.push('<script>', screen.js, '</script>');
+    parts.push('</body>', '</html>', '');
+    return parts.join('\n');
   }
 
   /** Caminho curto: frame -> conteudo -> tela. */

@@ -12,7 +12,10 @@ import { DesignCodeRenderer } from '../renderers/DesignCodeRenderer.js';
 
      1. escolher qual frame virou tela;
      2. mostrar o texto, e deixar editar;
-     3. deixar baixar o resultado como um HTML so.
+     3. deixar baixar o resultado: so o frame selecionado
+        e o que esta dentro dele, num HTML unico, com o
+        CSS no `<style>` e -- quando houver -- o
+        JavaScript no `<script>`.
 
    Digitar no textarea NAO regenera o codigo. O que
    voce escreve passa a ser a fonte da verdade, e o
@@ -90,6 +93,7 @@ export class UIDesignCodeView {
     baixar.type = 'button';
     baixar.className = 'design-code-btn is-primary';
     baixar.textContent = 'Baixar HTML';
+    baixar.title = 'Baixa so o frame selecionado num HTML unico, com o CSS dentro e o JavaScript, se houver';
     baixar.addEventListener('click', () => this._download());
     bar.appendChild(baixar);
 
@@ -110,13 +114,13 @@ export class UIDesignCodeView {
     this.fields = {
       html: this._pane(codeSide, 'HTML'),
       css: this._pane(codeSide, 'CSS'),
-      js: this._pane(codeSide, 'JavaScript')
+      js: this._pane(codeSide, 'JavaScript', 'Opcional: o que voce escrever aqui vai no <script> do arquivo baixado')
     };
     grid.appendChild(codeSide);
     return grid;
   }
 
-  _pane(parent, title) {
+  _pane(parent, title, placeholder) {
     const wrap = document.createElement('div');
     wrap.className = 'design-code-pane';
 
@@ -129,6 +133,7 @@ export class UIDesignCodeView {
     area.className = 'design-code-text';
     area.spellcheck = false;
     area.setAttribute('aria-label', 'Codigo ' + title);
+    if (placeholder) area.placeholder = placeholder;
     wrap.appendChild(area);
 
     parent.appendChild(wrap);
@@ -239,6 +244,13 @@ export class UIDesignCodeView {
     this.staleNote.textContent = this.stale ? 'O design mudou -- o codigo pode estar velho' : '';
   }
 
+  /**
+   * O botao de baixar entrega o frame num arquivo so, com tudo dentro: o
+   * `DesignCodeRenderer.document` monta o HTML com o CSS no `<style>` e,
+   * se houver JavaScript escrito, o `<script>` depois da tela. O texto
+   * usado e o das caixas em edicao, exatamente como estao agora -- o que
+   * esta dentro do frame selecionado, e mais nada.
+   */
   _download() {
     const frame = this.currentFrame();
     if (!frame) return;

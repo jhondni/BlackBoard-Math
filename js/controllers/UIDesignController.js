@@ -72,6 +72,9 @@ export class UIDesignController {
       toolbar.onToggleGrid = () => this.render();
       toolbar.onToggleGuides = () => this.render();
       toolbar.onToggleSnap = () => this.render();
+      // Cor e tamanho da grade sao preferencia de visualizacao como os
+      // toggles: o popover escreve no modelo e aqui so repintamos o SVG.
+      toolbar.onGridSettingsChange = () => this.render();
       toolbar.onZoomChange = (delta) => {
         if (designView) designView.zoomBy(delta);
       };
@@ -82,8 +85,9 @@ export class UIDesignController {
     }
 
     // A aba de codigo nao pede o arquivo ao controller: ela monta o texto
-    // com o gerador e so entrega o arquivo pronto. O download continua
-    // sendo do controller, como o do SVG.
+    // com o gerador e so entrega o arquivo pronto (so o frame selecionado,
+    // num HTML unico, com o CSS por dentro e o JavaScript, se houver).
+    // O download continua sendo do controller, como o do SVG.
     if (code) {
       code.onDownload = (fileName, text) => {
         UIDesignController.download(new Blob([text], { type: 'text/html' }), fileName);
@@ -376,6 +380,11 @@ export class UIDesignController {
 
   exitDesignMode() {
     this.active = false;
+    // O popover da grade vive no `<body>`, fora do container que vai ser
+    // escondido: sem fechar aqui ele ficaria flutuando sobre a lousa.
+    if (this.views.toolbar && this.views.toolbar.closeGridSettings) {
+      this.views.toolbar.closeGridSettings();
+    }
     if (this.$.designContainer) this.$.designContainer.classList.add('hidden');
     if (this.$.whiteboard) this.$.whiteboard.classList.remove('hidden');
     if (document.body) document.body.classList.remove('design-mode');

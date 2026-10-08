@@ -1681,6 +1681,33 @@ body.design-mode #sidebar-tab { display: none; }
 .design-fonts-btn:hover { border-color: var(--accent); color: var(--accent); }
 .design-fonts-btn:disabled { opacity: 0.55; cursor: wait; }
 
+/* ---- configuracao da grade (popover do botao Grade) ---- */
+/* O caret fica colado ao toggle Grade e e mais estreito, para se ler como a
+   seta do proprio toggle e nao como mais um botao de ferramenta. */
+.design-grid-caret { padding: 0 4px; color: var(--text-muted); }
+.design-grid-caret[aria-expanded="true"] { color: var(--accent); }
+/* O popover vive no `<body>`: filho da barra (com `overflow-x: auto`) seria
+   recortado em vez de flutuar por cima do canvas. A posicao vem do JS. */
+.design-grid-popover {
+  position: fixed; z-index: 70;
+  display: flex; flex-direction: column; gap: 8px;
+  min-width: 224px; padding: 10px 12px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-toolbar);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+/* `hidden` do atributo nao bastaria: o `display: flex` acima venceria a
+   regra de UA que esconderia o popover -- e a mesma armadilha dos campos
+   que somem quando a grade segue a cor do tema. */
+.design-grid-popover[hidden],
+.design-grid-popover [hidden] { display: none; }
+.design-grid-popover-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--text-muted);
+}
+
 /* ---- painel lateral ---- */
 #design-sidebar {
   display: flex; flex-direction: column; min-height: 0;

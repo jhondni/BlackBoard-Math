@@ -40,6 +40,23 @@ const MIN_DRAG_PX = 4;
 /** Shift durante a rotacao prende nos multiplos deste passo. */
 const ROTATION_STEP = 15;
 
+/**
+ * Direcoes do encaixe angular da linha com Shift: 0, 45, 90, 135, 180, 225,
+ * 270 e 315 graus. Tabela em vez de `cos/sin` para as horizontais e
+ * verticais caírem em zero exato -- cosseno de 90 graus vira 6e-17 em ponto
+ * flutuante, e a linha "reta" nasceria com uma altura invisivel, mas suja.
+ */
+const SNAP_DIRECTIONS = [
+  [1, 0],
+  [Math.SQRT1_2, Math.SQRT1_2],
+  [0, 1],
+  [-Math.SQRT1_2, Math.SQRT1_2],
+  [-1, 0],
+  [-Math.SQRT1_2, -Math.SQRT1_2],
+  [0, -1],
+  [Math.SQRT1_2, -Math.SQRT1_2]
+];
+
 /** Distancia (px de tela) de um novo ponto ao primeiro que fecha a forma. */
 const POLYGON_CLOSE_PX = 8;
 
@@ -284,6 +301,11 @@ export class UIDesignView {
     this.gridLine.setAttribute('d', 'M ' + step + ' 0 L 0 0 0 ' + step);
     // A grade e um hairline: 1px de TELA, qualquer que seja o zoom.
     this.gridLine.setAttribute('stroke-width', n(1 / this.design.zoom));
+    // Cor da grade, no `<path>` que o `<pattern>` repete -- e o mesmo caminho
+    // que pinta a grade de dentro dos frames, entao os dois nunca discordam.
+    // `style` inline vence a regra da classe; valor vazio remove a propriedade
+    // e devolve a palavra ao `--border-strong` do tema.
+    this.gridLine.style.stroke = this.design.gridColor || '';
 
     this.gridRect.setAttribute('x', n(view.left));
     this.gridRect.setAttribute('y', n(view.top));
@@ -335,6 +357,18 @@ export class UIDesignView {
         fill: node.background
       }, 'design-frame'));
       if (chrome) {
+        // A grade de dentro do frame: o mesmo `<pattern>` da grade da tela,
+        // entao mesma cor, mesma espessura e o mesmo alinhamento -- as linhas
+        // continuam sendo uma grade so, atravessando o canvas e o frame. O
+        // retangulo e a propria caixa do frame, entao ele ja nasce recortado
+        // nela. Vem depois do fundo (opaco, e o esconderia) e antes do
+        // conteudo, que sao os `<g>` dos filhos logo acima na camada de nos.
+        // So com chrome: o export SVG nunca levou grade, e continuou sem.
+        g.appendChild(el('rect', {
+          x: n(node.x), y: n(node.y), width: n(node.width), height: n(node.height),
+          fill: 'url(#' + GRID_PATTERN_ID + ')'
+        }, 'design-grid'));
+
         const label = el('text', { x: n(node.x), y: n(node.y - 6) }, 'design-frame-label');
         label.textContent = node.name;
         g.appendChild(label);
@@ -612,8 +646,29 @@ export class UIDesignView {
     return map[dir] || map.se;
   }
 
+  /**
+   * Trava a direcao do vetor `(dx, dy)` no multiplo de 45 graus mais proximo,
+   * mantendo o comprimento: e o Shift ao desenhar uma linha. O fim da linha
+   * nao vai para o cursor, vai para a diagonal mais perto dele -- a linha
+   * gira, nao encolhe (o comprimento continua sendo o do arrasto).
+   *
+   * O vetor nulo fica no proprio zero: sem direcao nao ha o que arredondar.
+   */
+  static snapAngle45(dx, dy) {
+    const length = Math.hypot(dx, dy);
+    if (!length) return { dx: 0, dy: 0 };
+
+    const step = Math.PI / 4;
+    const index = Math.round(Math.atan2(dy, dx) / step);
+    const [ux, uy] = SNAP_DIRECTIONS[((index % 8) + 8) % 8];
+    return { dx: ux * length, dy: uy * length };
+  }
+
   _drawCreatePreview(gesture) {
-    const bounds = this._createBounds(gesture, false);
+    // Mesma conta do commit: o preview precisa passar pelo Shift tambem, senao
+    // a linha aparece numa direcao enquanto o botao esta solto e nasce em outra
+    // no `pointerup`.
+    const bounds = this._createBounds(gesture, gesture.shiftKey);
     const g = el('g', { class: 'design-preview' });
 
     if (gesture.tool === 'line') {
@@ -632,10 +687,24 @@ export class UIDesignView {
       x: n(gesture.start.x + 8),
       y: n(gesture.start.y - 8)
     }, 'design-measure');
-    label.textContent = Math.round(bounds.width) + ' x ' + Math.round(bounds.height);
+    label.textContent = this._measureLabel(gesture, bounds);
     g.appendChild(label);
 
     this.overlay.appendChild(g);
+  }
+
+  /**
+   * Texto do rotulo do preview. Com Shift na linha, largura x altura nao diz
+   * nada -- o que interessa e o angulo travado, mostrado como inclinacao em
+   * 0..180 (a linha nao tem sentido: 315 e 135 sao a mesma reta).
+   */
+  _measureLabel(gesture, bounds) {
+    if (gesture.tool !== 'line' || !gesture.shiftKey) {
+      return Math.round(bounds.width) + ' x ' + Math.round(bounds.height);
+    }
+    let deg = Math.atan2(bounds.height, bounds.width) * 180 / Math.PI;
+    if (deg < 0) deg += 180;
+    return Math.round(deg) + '\u00B0';
   }
 
   /* ---- Sessao do poligono ----
@@ -870,6 +939,7 @@ export class UIDesignView {
         current: start,
         startClient: { x: e.clientX, y: e.clientY },
         currentClient: { x: e.clientX, y: e.clientY },
+        shiftKey: e.shiftKey,
         lines: []
       };
       this._capture(e);
@@ -968,6 +1038,9 @@ export class UIDesignView {
     if (gesture.type === 'create') {
       gesture.current = point;
       gesture.currentClient = { x: e.clientX, y: e.clientY };
+      // Guardado no gesto porque o preview precisa do mesmo estado de Shift
+      // que o commit: o `pointerup` pode chegar sem um `pointermove` novo.
+      gesture.shiftKey = e.shiftKey;
       this._renderOverlay();
       return;
     }

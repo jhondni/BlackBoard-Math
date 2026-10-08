@@ -42,6 +42,7 @@ export class UIDesign {
     this.showGuides = props.showGuides === true;
     this.snap = props.snap !== false;
     this.gridSize = Math.max(2, UINode.toNumber(props.gridSize, 8));
+    this.gridColor = UIDesign.normalizeGridColor(props.gridColor);
     this.guides = [];
   }
 
@@ -242,6 +243,23 @@ export class UIDesign {
     return this.gridSize;
   }
 
+  /**
+   * Cor da grade, ou `''` para seguir a cor do tema (`--border-strong`).
+   *
+   * So `#rrggbb` vale: e o unico formato que o `<input type=color>` conhece,
+   * e uma cor invalida voltaria para o tema em vez de virar uma grade
+   * invisivel no meio do canvas sem explicacao.
+   */
+  setGridColor(value) {
+    this.gridColor = UIDesign.normalizeGridColor(value);
+    return this.gridColor;
+  }
+
+  static normalizeGridColor(value) {
+    const text = typeof value === 'string' ? value.trim() : '';
+    return /^#[0-9a-f]{6}$/i.test(text) ? text : '';
+  }
+
   /* ---- Guias ---- */
 
   addGuide(type, pos) {
@@ -360,6 +378,7 @@ export class UIDesign {
       showGuides: this.showGuides,
       snap: this.snap,
       gridSize: this.gridSize,
+      gridColor: this.gridColor,
       guides: this.guides.map((guide) => ({ type: guide.type, pos: guide.pos }))
     };
   }
@@ -404,6 +423,9 @@ export class UIDesign {
     this.showGuides = data.showGuides === true;
     this.snap = data.snap !== false;
     this.gridSize = this.setGridSize(data.gridSize === undefined ? 8 : data.gridSize);
+    // Arquivo antigo nao tem `gridColor`: `undefined` normaliza para `''`,
+    // que e a cor do tema -- o mesmo padrao de quem nunca mexeu no campo.
+    this.gridColor = this.setGridColor(data.gridColor);
     this.guides = Array.isArray(data.guides)
       ? data.guides
           .filter((guide) => guide && (guide.type === 'v' || guide.type === 'h'))
