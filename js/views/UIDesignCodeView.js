@@ -4,8 +4,7 @@ import { DesignCodeRenderer } from '../renderers/DesignCodeRenderer.js';
    UI/UX DESIGNER - UIDesignCodeView
    ============================================
    A aba "Codigo": o frame virando HTML, CSS e
-   JavaScript, com o preview ao lado e o texto
-   editavel.
+   JavaScript, em tres caixas editaveis.
 
    A view nao gera codigo -- quem gera e o
    `DesignCodeRenderer`, que e uma funcao pura do
@@ -13,28 +12,16 @@ import { DesignCodeRenderer } from '../renderers/DesignCodeRenderer.js';
 
      1. escolher qual frame virou tela;
      2. mostrar o texto, e deixar editar;
-     3. mostrar o resultado num `<iframe>`.
-
-   O preview e um `srcdoc`, e nao uma div: o
-   `style.css` do app tem quase mil linhas de CSS
-   para o modulo, e se a pagina gerada herdasse
-   qualquer um deles o preview mentiria -- a tela
-   apareceria com as cores do editor, e nao as do
-   design. O `srcdoc` tambem da o que o Figma da:
-   o codigo que voce ve e o codigo que roda.
+     3. deixar baixar o resultado como um HTML so.
 
    Digitar no textarea NAO regenera o codigo. O que
    voce escreve passa a ser a fonte da verdade, e o
-   preview e atualizado a partir do seu texto. Se
-   digitar regenerasse, a aba comeria a edicao a
-   cada tecla. Por isso o botao "Gerar" existe e e
-   explicito -- e o aviso de "o design mudou" avisa
-   que o texto pode estar velho, sem trocar nada
-   debaixo dos dedos de quem edita.
+   botao "Gerar" e quem volta ao design -- regerar a
+   cada tecla comeria a edicao. Por isso o aviso de
+   "o design mudou" avisa que o texto pode estar
+   velho, sem trocar nada debaixo dos dedos de quem
+   edita.
    ============================================ */
-
-/** Espera a digitacao parar antes de remontar o preview. */
-const PREVIEW_DELAY_MS = 250;
 
 export class UIDesignCodeView {
   constructor(design, $) {
@@ -42,12 +29,10 @@ export class UIDesignCodeView {
     this.$ = $ || {};
     this.root = null;
     this.fields = null;
-    this.preview = null;
     this.frameSelect = null;
     this.staleNote = null;
     this.frameId = null;
     this.stale = false;
-    this.timer = null;
     this.active = false;
 
     this.onDownload = null;   // (fileName, text) => void
@@ -128,24 +113,6 @@ export class UIDesignCodeView {
       js: this._pane(codeSide, 'JavaScript')
     };
     grid.appendChild(codeSide);
-
-    const previewSide = document.createElement('div');
-    previewSide.className = 'design-code-preview-side';
-    const label = document.createElement('span');
-    label.className = 'design-code-title';
-    label.textContent = 'Preview';
-    previewSide.appendChild(label);
-
-    // `sandbox` sem `allow-scripts` seria mais apertado, mas o JS gerado
-    // (os botoes de visibilidade) precisa rodar -- e e exatamente esse o
-    // JS que a aba promete mostrar.
-    this.preview = document.createElement('iframe');
-    this.preview.className = 'design-code-preview';
-    this.preview.title = 'Preview da tela gerada';
-    this.preview.setAttribute('sandbox', 'allow-scripts');
-    previewSide.appendChild(this.preview);
-
-    grid.appendChild(previewSide);
     return grid;
   }
 
@@ -162,7 +129,6 @@ export class UIDesignCodeView {
     area.className = 'design-code-text';
     area.spellcheck = false;
     area.setAttribute('aria-label', 'Codigo ' + title);
-    area.addEventListener('input', () => this._onEdit());
     wrap.appendChild(area);
 
     parent.appendChild(wrap);
@@ -224,7 +190,6 @@ export class UIDesignCodeView {
     this._setFields(screen);
     this.stale = false;
     this._syncBar();
-    this._refresh();
     return true;
   }
 
@@ -272,30 +237,6 @@ export class UIDesignCodeView {
       return;
     }
     this.staleNote.textContent = this.stale ? 'O design mudou -- o codigo pode estar velho' : '';
-  }
-
-  _onEdit() {
-    this._schedulePreview();
-  }
-
-  _schedulePreview() {
-    if (this.timer) clearTimeout(this.timer);
-    // Debounce: digitar rapido remontaria o iframe a cada tecla, e o
-    // preview piscaria sem parar.
-    this.timer = setTimeout(() => this._refresh(), PREVIEW_DELAY_MS);
-  }
-
-  /** O preview vem do TEXTO dos campos, nunca do design. */
-  _refresh() {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = null;
-    }
-    if (!this.preview || !this.fields) return;
-    const html = this.fields.html.value;
-    const css = this.fields.css.value;
-    const js = this.fields.js.value;
-    this.preview.srcdoc = DesignCodeRenderer.document({ title: '', html, css, js });
   }
 
   _download() {

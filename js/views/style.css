@@ -1533,6 +1533,13 @@ body.design-mode #sidebar-tab { display: none; }
 /* A grade e um <rect> dentro do <g> transformado, entao existe mesmo com o
    desenho desligado: e a regra abaixo que a esconde. */
 #design-svg:not(.show-grid) .design-grid { display: none; }
+/* O `hidden` do atributo so escondria o SVG se a regra de cima nao
+   existisse: `#design-svg` tem especificidade de ID e vence o
+   `[hidden] { display: none }` do UA. Sem esta linha o canvas continua
+   visivel por tras da aba Codigo, que e o frame aparecendo atras do
+   editor -- o `setWorkspace` ja escreve o atributo, o CSS e quem tem
+   que obedece-lo. */
+#design-svg[hidden] { display: none; }
 #design-svg[data-tool="frame"],
 #design-svg[data-tool="rect"],
 #design-svg[data-tool="ellipse"],
@@ -1699,7 +1706,7 @@ body.design-mode #sidebar-tab { display: none; }
 .design-layer.is-ghost {
   position: fixed; top: 0; left: 0; z-index: 60;
   margin: 0; pointer-events: none;
-  background: var(--bg-panel); border-color: var(--accent);
+  background: var(--bg-surface); border-color: var(--accent);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
   cursor: grabbing;
 }
@@ -1755,10 +1762,14 @@ body.design-mode #sidebar-tab { display: none; }
    onde desenhar -- e o que o agrupador novo existe para fazer. */
 .design-toolbar.is-code .design-toolbar-canvas-only { display: none; }
 
+/* `--bg-base`, e nao `--bg-primary`: essa variavel nao existe em `:root`
+   nem no dark mode, e CSS var indefinida invalida a propriedade inteira
+   -- o background caia no `transparent` e o SVG da lousa de design
+   aparecia por tras do editor, com o frame vindo "atrás" do codigo. */
 .design-code {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; gap: 10px;
-  padding: 12px; background: var(--bg-primary);
+  padding: 12px; background: var(--bg-base);
 }
 .design-code[hidden] { display: none; }
 .design-code-bar { display: flex; align-items: center; gap: 8px; }
@@ -1769,7 +1780,7 @@ body.design-mode #sidebar-tab { display: none; }
 .design-code-select {
   height: 30px; padding: 0 8px; max-width: 220px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--bg-secondary); color: var(--text-primary);
+  background: var(--bg-input); color: var(--text-primary);
   font-family: var(--font-sans); font-size: 12px;
 }
 .design-code-stale {
@@ -1778,7 +1789,7 @@ body.design-mode #sidebar-tab { display: none; }
 .design-code-btn {
   height: 30px; padding: 0 12px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--bg-secondary); color: var(--text-primary);
+  background: var(--bg-input); color: var(--text-primary);
   font-family: var(--font-sans); font-size: 12px; font-weight: 600;
   cursor: pointer;
 }
@@ -1787,18 +1798,15 @@ body.design-mode #sidebar-tab { display: none; }
   border-color: var(--accent); background: var(--accent); color: #fff;
 }
 
-/* Duas linhas: as tres caixas de codigo lado a lado em cima, e o preview
-   ocupando a largura toda embaixo.
-
-   O preview embaixo, e nao ao lado, por causa da largura: e o que mais
-   precisa dela, porque um frame de celular tem ~390px e quatro colunas
-   iguais espremeriam tanto o codigo quanto a tela que ele mostra. */
+/* Uma linha so: sem a tela do preview, o editor ocupa a altura toda da
+   aba. As tres caixas ficam lado a lado; a largura que o indentado do
+   HTML pede e que decide a quebra de coluna no responsivo. */
 .design-code-grid {
   flex: 1; min-height: 0;
-  display: grid; grid-template-rows: 1fr 1fr; gap: 12px;
+  display: flex;
 }
 .design-code-editor {
-  min-width: 0; min-height: 0;
+  flex: 1; min-width: 0; min-height: 0;
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
 }
 .design-code-pane {
@@ -1814,21 +1822,11 @@ body.design-mode #sidebar-tab { display: none; }
   flex: 1; min-height: 60px; width: 100%;
   padding: 8px; resize: none;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--bg-secondary); color: var(--text-primary);
+  background: var(--bg-input); color: var(--text-primary);
   font-family: var(--font-mono, monospace); font-size: 11.5px; line-height: 1.5;
   tab-size: 2;
 }
 .design-code-text:focus { outline: none; border-color: var(--accent); }
-
-.design-code-preview-side {
-  min-width: 0; min-height: 0;
-  display: flex; flex-direction: column; gap: 6px;
-}
-.design-code-preview {
-  flex: 1; min-height: 0; width: 100%;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: #fff;
-}
 
 /* ============================================
    RESPONSIVE
@@ -1837,10 +1835,8 @@ body.design-mode #sidebar-tab { display: none; }
   #controls-bar { right: 10px; }
   #workspace { padding-right: 70px; }
   /* Tres caixas de codigo lado a lado ja pedem ~330px cada para o
-     indentado do HTML respirar; abaixo disso elas voltam a empilhar, com
-     o preview por baixo. Sao duas linhas do grid de fora (editor e
-     preview) -- as tres empilhadas sao linhas do grid de dentro. */
-  .design-code-grid { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+     indentado do HTML respirar; abaixo disso elas empilham, virando
+     linhas do grid do editor. */
   .design-code-editor { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr 1fr; }
   .design-code-pane { min-height: 90px; }
 }
