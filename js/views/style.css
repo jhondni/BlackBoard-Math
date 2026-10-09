@@ -1557,6 +1557,10 @@ body.design-mode #sidebar-tab { display: none; }
   vector-effect: non-scaling-stroke; pointer-events: none;
 }
 .design-hit { fill: transparent; }
+/* Faixa de clique da linha: invisível, mas clicável. O `pointer-events:
+   stroke` e o que garante o clique mesmo com o traço 100% transparente --
+   sem ele o navegador só repassa eventos na parte pintada de verdade. */
+.design-hit-line { stroke: transparent; pointer-events: stroke; }
 .design-node { cursor: move; }
 .design-node.is-locked { pointer-events: none; }
 .design-frame {

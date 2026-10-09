@@ -173,6 +173,13 @@ objeto, sem caso especial.
 - **Sem Shift a linha continua livre** — como antes: ela nunca passou pelo
   encaixe da grade, e o Shift nas demais ferramentas segue desligando a
   grade, como já fazia.
+- **Linha selecionável** — clicar numa linha do canvas acha o traço numa
+  faixa de **12 px de tela** em volta dele (`.design-hit-line`), medida em
+  pixels de tela e não em unidades de design, então vale igual a 10% e a
+  800% de zoom. Sem isso o clique dependia da bbox do nó, que em linha
+  horizontal ou vertical tem altura zero e não recebia evento nenhum — e
+  desde o snap de 45° a reta virou o caso comum. A faixa é `chrome`, então
+  não entra no SVG exportado nem na aba Codigo.
 - **Duplicar camada** — o botão de copiar na linha do painel de camadas (ao
   lado do olho e da trava) ou **Ctrl+D** clona o elemento selecionado. A cópia
   nasce **+10,+10** do original — copiar da cópia soma de novo, então as

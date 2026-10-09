@@ -34,6 +34,13 @@ const GRID_PATTERN_ID = 'design-grid-pattern';
 const HANDLE_PX = 9;
 const ROTATE_OFFSET_PX = 26;
 
+/**
+ * Faixa de clique ao redor de uma linha, em px de TELA. A caixa de acerto
+ * comum e a bbox do no, e a bbox de uma linha horizontal ou vertical tem
+ * zero de altura: o clique nao achava nada. Vale para o traço fino tambem.
+ */
+const LINE_HIT_PX = 12;
+
 /** Abaixo disso o gesto e um clique: o no nasce com o tamanho padrao. */
 const MIN_DRAG_PX = 4;
 
@@ -364,6 +371,21 @@ export class UIDesignView {
       g.appendChild(el('rect', {
         x: n(node.x), y: n(node.y), width: n(node.width), height: n(node.height)
       }, 'design-hit'));
+
+      // Linha: a bbox acima tem zero de altura (horizontal) ou zero de
+      // largura (vertical) e nao recebe clique nenhum -- e o caso comum
+      // desde que o snap de 45 graus existe. Este `<line>` invisivel da a
+      // faixa de clique em volta do traço, medida em px de TELA e nao em
+      // unidades de design, para valer o mesmo a 10% e a 800% de zoom
+      // (mesma conta dos handles). Só chrome: o export SVG nunca o leva.
+      if (node.type === 'shape' && node.shapeType === 'line') {
+        g.appendChild(el('line', {
+          x1: n(node.x), y1: n(node.y),
+          x2: n(node.x + node.width), y2: n(node.y + node.height),
+          'stroke-width': n(Math.max(node.strokeWidth, LINE_HIT_PX / (this.design.zoom || 1))),
+          'stroke-linecap': 'round'
+        }, 'design-hit-line'));
+      }
     }
 
     if (node.type === 'frame') {
