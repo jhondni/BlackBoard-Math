@@ -203,6 +203,14 @@ objeto, sem caso especial.
   requebram e remedem a altura na hora (`setSize`/`setBounds` sobrescritos
   e `fitHeight()` logo após o valor direto do painel). A aba Codigo ganhou
   `white-space: pre-wrap` para os `\n` valerem lá também.
+- **Mover a tela** — segurar **Espaço** e arrastar, ou arrastar com o **botão do
+  meio** ou o **direito**, desloca o conteúdo (`pan` do `UIDesignView`). O botão
+  do meio não funcionava no Chrome/Edge do Windows: o **autoscroll** do
+  navegador nasce no `mousedown` do botão 1 e, quando abre, engole o gesto — o
+  `pointerdown` do SVG nem vira pan e a tela fica parada. Cancelar o `mousedown`
+  na fase de captura (`_cancelMiddleAutoscroll`) impede o autoscroll de tomar o
+  botão, sem mexer no clique esquerdo. A classe `is-panning` (cursor de mão)
+  agora acompanha também o arrasto em andamento, não só o Espaço segurado.
 
 ### Atalhos de teclado
 | Tecla | Ação |

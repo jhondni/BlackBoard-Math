@@ -124,6 +124,7 @@ export class UIDesignView {
     this.currentTool = 'select';
     this.gesture = null;
     this.spaceDown = false;
+    this.panning = false;           // pan em andamento (botao do meio/direito)
     this.imageNaturalSize = null;   // medida do arquivo, para o clique solto
 
     // Sessao de desenho do poligono. Existe so enquanto a ferramenta
@@ -196,6 +197,8 @@ export class UIDesignView {
     this.svg.addEventListener('dblclick', (e) => this._onDblClick(e));
     this.svg.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
     this.svg.addEventListener('contextmenu', (e) => e.preventDefault());
+    // A fase de captura e obrigatoria: ver `_cancelMiddleAutoscroll`.
+    this.svg.addEventListener('mousedown', (e) => this._cancelMiddleAutoscroll(e), true);
   }
 
   /* ---- Ferramenta e viewport ---- */
@@ -237,7 +240,23 @@ export class UIDesignView {
   /** Segurar espaco e o gesto de "mao": arrastar o conteudo. */
   setSpace(down) {
     this.spaceDown = down === true;
-    if (this.svg) this.svg.classList.toggle('is-panning', this.spaceDown);
+    this._syncPanCursor();
+  }
+
+  /** Cursor de mao: espaco segurado ou um pan em andamento (meio/direito). */
+  _syncPanCursor() {
+    if (this.svg) this.svg.classList.toggle('is-panning', this.spaceDown || this.panning);
+  }
+
+  /**
+   * O autoscroll do Chromium nasce no `mousedown` do botao do meio e, quando
+   * abre, engole o arrasto: o `pointerdown` do SVG nem chega a virar gesto de
+   * pan, e o botao do meio fica "morto" sobre a lousa. Cancelar o `mousedown`
+   * na fase de captura, antes do gesto nativo se firmar, e o que impede o
+   * autoscroll de tomar o botao -- o clique esquerdo passa intacto.
+   */
+  _cancelMiddleAutoscroll(e) {
+    if (e.button === 1) e.preventDefault();
   }
 
   /**
@@ -949,6 +968,8 @@ export class UIDesignView {
     // Botao do meio, direito ou espaco: arrastar o conteudo.
     if (e.button === 1 || e.button === 2 || this.spaceDown) {
       this.gesture = { type: 'pan', last: { x: e.clientX, y: e.clientY } };
+      this.panning = true;
+      this._syncPanCursor();
       this._capture(e);
       e.preventDefault();
       return;
@@ -1114,6 +1135,8 @@ export class UIDesignView {
     this.render();
 
     if (gesture.type === 'pan') {
+      this.panning = false;
+      this._syncPanCursor();
       if (this.onViewportChange) this.onViewportChange();
       return;
     }
