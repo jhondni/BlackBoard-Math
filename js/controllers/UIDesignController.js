@@ -334,6 +334,11 @@ export class UIDesignController {
       node.name = name;
     } else if (DIRECT_PROPS.includes(prop)) {
       node[prop] = value;
+      // Corpo, familia e entrelinha do texto mudam a quebra de linha e a
+      // altura medida, mas o valor entra direto no no (sem metodo), entao
+      // quem pediu e que remonta a altura -- senao o texto estourava a
+      // caixa depois de aumentar o corpo.
+      if (node.type === 'text' && node.autoHeight) node.fitHeight();
     } else {
       return;
     }

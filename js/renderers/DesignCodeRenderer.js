@@ -201,6 +201,9 @@ export class DesignCodeRenderer {
       box.push('color: ' + node.color);
       box.push('text-align: ' + node.align);
       box.push('line-height: ' + node.lineHeight);
+      // `pre` para os `\n` digitados virarem quebra de linha como no SVG;
+      // `break-word` para a palavra mais larga que a caixa tambem quebrar.
+      box.push('white-space: pre-wrap');
       box.push('overflow-wrap: break-word');
       box.push('box-sizing: border-box');
     }

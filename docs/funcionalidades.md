@@ -190,6 +190,19 @@ objeto, sem caso especial.
   imagem com `originalSrc` são copiados por conta própria, sem uma lista de
   campos para manter em sincronia. Não há desfazer: o módulo Design não tem
   histórico, então desfazer uma duplicação é apagar a cópia.
+- **Texto cabe na caixa** — o nó de texto do Design quebra linha na largura
+  da própria caixa, medido na fonte real do nó
+  (`TextRenderer.wrapToWidth`, canvas de medição cacheado): parte por `\n`,
+  depois nas espaços, e uma palavra mais larga que a caixa (uma URL, por
+  exemplo) é partida caractere a caractere. Sem isso `lines` era só
+  `split('\n')` e o SVG — que não tem quebra automática de linha — deixava
+  a frase correr para fora do nó e por cima dos vizinhos, enquanto a aba
+  Codigo quebrava em silêncio por ser HTML. A altura automática
+  (`autoHeight`) passa a contar as linhas quebradas: redimensionar a
+  largura pela alça ou pelo painel e trocar corpo/família/entrelinha
+  requebram e remedem a altura na hora (`setSize`/`setBounds` sobrescritos
+  e `fitHeight()` logo após o valor direto do painel). A aba Codigo ganhou
+  `white-space: pre-wrap` para os `\n` valerem lá também.
 
 ### Atalhos de teclado
 | Tecla | Ação |

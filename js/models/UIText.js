@@ -1,4 +1,5 @@
 import { UINode } from './UINode.js';
+import { TextRenderer } from '../renderers/TextRenderer.js';
 
 /* ============================================
    UI/UX DESIGNER - UIText
@@ -68,8 +69,20 @@ export class UIText extends UINode {
     return new UIText(data);
   }
 
+  /**
+   * Linhas prontas para desenho: o texto partido por `\n` e quebrado na
+   * largura da caixa, medido com a propria fonte do no. E isto que faz o
+   * texto caber: o SVG nao quebra linha sozinho, entao uma frase longa
+   * correria para fora do no e por cima dos vizinhos (a aba Codigo quebra
+   * por ser HTML, e por isso nunca apareceu la).
+   */
   get lines() {
-    return this.text.split('\n');
+    return TextRenderer.wrapToWidth(this.text, this.width, UIText.fontString(this));
+  }
+
+  /** A mesma fonte no formato que o canvas de medicao e o SVG entendem. */
+  static fontString(node) {
+    return `${node.fontWeight} ${node.fontSize}px ${node.fontFamily}`;
   }
 
   /** Altura que o texto ocupa: linhas x corpo x entrelinha. */
@@ -82,6 +95,23 @@ export class UIText extends UINode {
     if (this.locked) return this.height;
     this.height = Math.max(this.minHeight, this.measureHeight());
     return this.height;
+  }
+
+  /** Largura nova muda onde as linhas quebram, e a altura medida junto:
+      sem refazer aqui, redimensionar pela alaca ou pelo painel deixaria o
+      texto transbordando embaixo da caixa. */
+  setSize(width, height) {
+    const antes = this.width;
+    const ok = super.setSize(width, height);
+    if (ok && this.autoHeight && this.width !== antes) this.fitHeight();
+    return ok;
+  }
+
+  setBounds(bounds = {}) {
+    const antes = this.width;
+    const ok = super.setBounds(bounds);
+    if (ok && this.autoHeight && this.width !== antes) this.fitHeight();
+    return ok;
   }
 
   setText(value) {
