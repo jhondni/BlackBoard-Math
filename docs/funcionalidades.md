@@ -173,6 +173,16 @@ objeto, sem caso especial.
 - **Sem Shift a linha continua livre** — como antes: ela nunca passou pelo
   encaixe da grade, e o Shift nas demais ferramentas segue desligando a
   grade, como já fazia.
+- **Duplicar camada** — o botão de copiar na linha do painel de camadas (ao
+  lado do olho e da trava) ou **Ctrl+D** clona o elemento selecionado. A cópia
+  nasce **+10,+10** do original — copiar da cópia soma de novo, então as
+  repetidas se afastam em cascata em vez de ficarem coladas —, com o próximo
+  nome livre do tipo, acima do original na pilha e já selecionada, pronta
+  para arrastar. O clone passa pela própria serialização do arquivo
+  (`toJSON` → `nodeFromJSON`), então forma com pontos, texto com tipografia e
+  imagem com `originalSrc` são copiados por conta própria, sem uma lista de
+  campos para manter em sincronia. Não há desfazer: o módulo Design não tem
+  histórico, então desfazer uma duplicação é apagar a cópia.
 
 ### Atalhos de teclado
 | Tecla | Ação |

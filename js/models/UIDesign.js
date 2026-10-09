@@ -108,6 +108,20 @@ export class UIDesign {
     return new UINode({ ...props, type });
   }
 
+  /**
+   * No construido a partir do que `toJSON` gravou, ou `null` para qualquer
+   * coisa que a view nao saberia desenhar. E a mesma regra do `fromJSON`:
+   * tipo desconhecido e descartado, nao entra cru no array.
+   */
+  static nodeFromJSON(item) {
+    if (!item || typeof item !== 'object') return null;
+    if (item.type === 'frame') return UIFrame.fromJSON(item);
+    if (item.type === 'image') return UIImage.fromJSON(item);
+    if (item.type === 'shape') return UIShape.fromJSON(item);
+    if (item.type === 'text') return UIText.fromJSON(item);
+    return null;
+  }
+
   /** Prefixo do nome automatico, conforme a ferramenta. */
   static labelFor(type, props = {}) {
     if (type === 'frame') return 'Frame';
@@ -130,6 +144,41 @@ export class UIDesign {
     const node = UIDesign.buildNode(type, { name: this._nextName(base), ...props });
     this.nodes.push(node);
     return node;
+  }
+
+  /**
+   * Copia o no `id` e devolve a copia, ja selecionada (ou `null`).
+   *
+   * O caminho e a propria serializacao (`toJSON` -> `nodeFromJSON`), entao
+   * cada tipo e copiado por conta propria: um poligono com pontos, um texto
+   * com tipografia e uma imagem com `originalSrc` saem iguais sem uma lista
+   * de campos para manter em sincronia. O `id` vai embora porque senao dois
+   * nos teriam o mesmo e o `getNode` devolveria o primeiro.
+   *
+   * Nascem em +10,+10: exatamente em cima o original ficaria inatingivel por
+   * baixo, e o offset progressivo (copiar da copia soma de novo) separa as
+   * repetidas. O nome e o proximo livre do tipo, igual ao `createNode`.
+   */
+  duplicateNode(id) {
+    const source = this.getNode(id);
+    if (!source) return null;
+
+    const data = source.toJSON();
+    delete data.id;
+    delete data.selected;
+    data.x = source.x + 10;
+    data.y = source.y + 10;
+    data.name = this._nextName(UIDesign.labelFor(data.type, data));
+
+    const copy = UIDesign.nodeFromJSON(data);
+    if (!copy) return null;
+
+    // Acima do original: o indice no array e o z, entao +1 e a camada
+    // vizinha de cima na lista do painel.
+    const index = this.nodes.indexOf(source);
+    this.nodes.splice(index + 1, 0, copy);
+    this.selectNode(copy);
+    return copy;
   }
 
   addNode(node) {
@@ -405,14 +454,8 @@ export class UIDesign {
     let skipped = 0;
 
     data.nodes.forEach((item) => {
-      if (!item || typeof item !== 'object') {
-        skipped += 1;
-        return;
-      }
-      if (item.type === 'frame') this.nodes.push(UIFrame.fromJSON(item));
-      else if (item.type === 'image') this.nodes.push(UIImage.fromJSON(item));
-      else if (item.type === 'shape') this.nodes.push(UIShape.fromJSON(item));
-      else if (item.type === 'text') this.nodes.push(UIText.fromJSON(item));
+      const node = UIDesign.nodeFromJSON(item);
+      if (node) this.nodes.push(node);
       else skipped += 1;
     });
 

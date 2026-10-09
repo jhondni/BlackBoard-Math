@@ -8,10 +8,10 @@
    A lista e um espelho de `UIDesign.layers`, e nao
    uma fonte: toda acao aqui vira chamada no modelo
    (`selectById`, `toggleNodeVisibility`,
-   `toggleNodeLock`, `renameNode`, `moveNodeTo`) e o
-   controller redesenha. Por isso o painel nao guarda
-   estado proprio alem do campo de renomear em edicao
-   e do arrasto em andamento.
+   `toggleNodeLock`, `renameNode`, `moveNodeTo`,
+   `duplicateNode`) e o controller redesenha. Por isso
+   o painel nao guarda estado proprio alem do campo
+   de renomear em edicao e do arrasto em andamento.
 
    Reordenar e arrastar, com Pointer Events como o
    resto do modulo. O arrasto so comeca depois de alguns
@@ -29,6 +29,8 @@ const EYE_ON = '<path fill="none" stroke="currentColor" stroke-width="1.8" d="M2
 const EYE_OFF = '<path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 4l16 16M9.6 5.3A9.6 9.6 0 0112 5c6.4 0 10 6 10 6a17 17 0 01-3.2 3.7M6.4 7.6A17 17 0 002 11s3.6 6 10 6c1 0 1.9-.1 2.7-.4"/>';
 const LOCK_ON = '<path fill="currentColor" d="M7 10V8a5 5 0 0110 0v2h1v10H6V10h1zm2 0h6V8a3 3 0 00-6 0v2z"/>';
 const LOCK_OFF = '<path fill="none" stroke="currentColor" stroke-width="1.8" d="M7 10V8a5 5 0 019.5-2M6 10h12v10H6V10z"/>';
+/** Duas folhas sobrepostas: o padrao de "duplicar" do Figma e do CSS. */
+const COPY = '<rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M6 15H5a2 2 0 01-2-2V5a2 2 0 012-2h8a2 2 0 012 2v1"/>';
 
 /** Percorridos antes do clique virar arrasto, em px. */
 const DRAG_THRESHOLD = 4;
@@ -49,6 +51,7 @@ export class UILayerPanelView {
     this.onToggleLock = null;      // (id) => void
     this.onRename = null;          // (id, name) => void
     this.onMoveNode = null;        // (id, panelIndex) => void
+    this.onDuplicate = null;       // (id) => void
     this.onRequestEditText = null; // (node) => void
 
     // referencias estaveis: as linhas sao recriadas a cada render,
@@ -117,6 +120,8 @@ export class UILayerPanelView {
       () => this.onToggleVisible && this.onToggleVisible(item.id)));
     row.appendChild(this._iconButton(item.locked ? LOCK_ON : LOCK_OFF, item.locked ? 'Destravar' : 'Travar', 'is-lock-toggle',
       () => this.onToggleLock && this.onToggleLock(item.id)));
+    row.appendChild(this._iconButton(COPY, 'Duplicar camada', 'is-duplicate',
+      () => this.onDuplicate && this.onDuplicate(item.id)));
 
     row.addEventListener('click', () => {
       if (this._swallowClick) {

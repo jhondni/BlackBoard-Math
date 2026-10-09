@@ -157,6 +157,7 @@ export class UIDesignController {
       layers.onMoveNode = (id, panelIndex) => {
         if (this.design.moveNodeTo(id, panelIndex)) this.render();
       };
+      layers.onDuplicate = (id) => this.duplicateSelected(id);
       layers.onRequestEditText = (node) => this.requestEditText(node);
     }
 
@@ -367,6 +368,19 @@ export class UIDesignController {
     return removed;
   }
 
+  /**
+   * Duplica a camada `id` -- ou a selecionada, quando vem do Ctrl+D. A
+   * copia nasce deslocada e ja selecionada, e o `render()` repinta as
+   * quatro views de uma vez (canvas, camadas, propriedades e aviso da
+   * aba Codigo), no mesmo formato do `removeSelected`.
+   */
+  duplicateSelected(id) {
+    const target = id || this.design.selectedId;
+    const copy = target ? this.design.duplicateNode(target) : null;
+    if (copy) this.render();
+    return copy;
+  }
+
   /* ---- Modo ---- */
 
   enterDesignMode() {
@@ -474,6 +488,14 @@ export class UIDesignController {
     else if (key === 'enter' && this.views.designView && this.views.designView.isDrawingPolygon()) {
       this.views.designView.finishPolygon();
       handled = true;
+    }
+    // Ctrl+D duplica a camada selecionada. O `preventDefault` nao e
+    // opcional: no navegador Ctrl+D e "favoritar pagina", e sem segurar o
+    // evento a barra salva em cima do modo Design. Com o `stopImmediatePropagation`
+    // o Ctrl+D tambem nao chega no ToolController da lousa.
+    else if (key === 'd' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      this.duplicateSelected();
     }
     else if (key.indexOf('arrow') === 0) this._nudge(key, e);
     else if (TOOL_KEYS[key] && !e.ctrlKey && !e.metaKey) this.setTool(TOOL_KEYS[key]);
