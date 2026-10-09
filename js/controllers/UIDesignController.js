@@ -153,12 +153,50 @@ export class UIDesignController {
         this.design.renameNode(id, name);
         this.render();
       };
-      // `panelIndex` e a posicao na lista (0 = topo = frente da pilha).
-      layers.onMoveNode = (id, panelIndex) => {
-        if (this.design.moveNodeTo(id, panelIndex)) this.render();
+      // `beforeId` e o id da linha que fica logo abaixo da camada solta
+      // (`null` = fundo da pilha), e nao um indice: com as pastas, a
+      // posicao visivel de uma linha nao e o indice dela no array. Depois
+      // de mover, a pasta da camada e a de quem ficou logo abaixo -- e o
+      // que faz soltar entre os membros entrar na pasta, e soltar fora
+      // dela sair.
+      layers.onMoveNode = (id, beforeId) => {
+        if (!this.design.moveNodeTo(id, beforeId)) return;
+        const below = beforeId ? this.design.getNode(beforeId) : null;
+        this.design.setNodeGroup(id, below ? below.parentId : null);
+        this.render();
       };
       layers.onDuplicate = (id) => this.duplicateSelected(id);
       layers.onRequestEditText = (node) => this.requestEditText(node);
+
+      layers.onCreateGroup = () => {
+        const group = this.design.createGroup();
+        this.render();
+        // Uma pasta nasce vazia e sem uso; abrir o nome para digitar deixa
+        // o gesto completo num passo so.
+        if (group) layers.startRenameGroup(group.id);
+      };
+      layers.onJoinGroup = (id, groupId) => {
+        if (this.design.setNodeGroup(id, groupId)) this.render();
+      };
+      layers.onRenameGroup = (groupId, name) => {
+        this.design.renameGroup(groupId, name);
+        this.render();
+      };
+      layers.onToggleGroup = (groupId) => {
+        this.design.toggleGroupCollapsed(groupId);
+        this.render();
+      };
+      layers.onToggleGroupVisible = (groupId) => {
+        this.design.toggleGroupVisibility(groupId);
+        this.render();
+      };
+      layers.onToggleGroupLock = (groupId) => {
+        this.design.toggleGroupLock(groupId);
+        this.render();
+      };
+      layers.onRemoveGroup = (groupId) => {
+        if (this.design.removeGroup(groupId)) this.render();
+      };
     }
 
     if (properties) {

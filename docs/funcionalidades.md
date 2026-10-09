@@ -211,6 +211,15 @@ objeto, sem caso especial.
   na fase de captura (`_cancelMiddleAutoscroll`) impede o autoscroll de tomar o
   botão, sem mexer no clique esquerdo. A classe `is-panning` (cursor de mão)
   agora acompanha também o arrasto em andamento, não só o Espaço segurado.
+- **Grupos de camadas** — o botão **+** no cabeçalho do painel cria uma pasta
+  ("Grupo 1", "Grupo 2"…), renomeável com duplo clique e recolhível pela seta.
+  Arrastar uma camada para cima de um cabeçalho a põe na pasta; arrastar para
+  fora a tira; o botão de desagrupar devolve todos à raiz. A pasta é **só
+  organização do painel**: grava `parentId` no nó e mais nada — a ordem da
+  pilha (o z), a geometria, o SVG e a aba Codigo ficam idênticos, e desfazer
+  não mexe no desenho. O olho e a trava da pasta valem para o conjunto (acendem
+  quando todos os membros estão visíveis/destravados) e levam todos ao outro
+  estado num clique. Não há pastas dentro de pastas: um nível só.
 
 ### Atalhos de teclado
 | Tecla | Ação |

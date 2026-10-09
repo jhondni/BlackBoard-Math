@@ -33,6 +33,7 @@ export class UINode {
       visible = true,
       locked = false,
       selected = false,
+      parentId = null,
       minWidth = DEFAULT_MIN,
       minHeight = DEFAULT_MIN
     } = props;
@@ -53,6 +54,10 @@ export class UINode {
     this.visible = visible !== false;
     this.locked = locked === true;
     this.selected = selected === true;
+    // Pasta do painel de camadas a que o no pertence, ou `null` na raiz.
+    // Nao muda geometria, z nem desenho: e organizacao do painel, e o
+    // grupo pode ser desfeito sem mexer em nada no canvas.
+    this.parentId = typeof parentId === 'string' && parentId ? parentId : null;
   }
 
   /* ---- Utilitarios estaticos ---- */
@@ -200,7 +205,8 @@ export class UINode {
       rotation: this.rotation,
       visible: this.visible,
       locked: this.locked,
-      selected: this.selected
+      selected: this.selected,
+      parentId: this.parentId
     };
   }
 }

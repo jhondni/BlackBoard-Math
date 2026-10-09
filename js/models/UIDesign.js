@@ -22,6 +22,13 @@ import { UIText } from './UIText.js';
    A selecao e unica no MVP: `selectedId` guarda o
    id e `selected` devolve o no (ou null). O painel de
    propriedades do MVP edita um elemento por vez.
+
+   `groups` sao pastas do painel de camadas: um no aponta
+   para a pasta por `parentId` e nada mais. Nao ha no de
+   grupo, nao ha hierarquia de desenho -- a ordem de
+   `nodes` continua sendo o z e a geometria continua em
+   coordenadas do canvas. E o que permite agrupar e
+   desagrupar sem tocar no desenho nem no codigo gerado.
    ============================================ */
 
 /** Distancia maxima, em px de design, para um valor grudar na guia. */
@@ -30,6 +37,7 @@ export const SNAP_THRESHOLD = 6;
 export class UIDesign {
   constructor(props = {}) {
     this.nodes = [];
+    this.groups = [];
     this.selectedId = null;
 
     this.zoom = 1;
@@ -60,20 +68,77 @@ export class UIDesign {
     return this.nodes.filter((node) => node.type === 'frame');
   }
 
-  /** Espelho para o painel de camadas, do topo da pilha para o fundo. */
+  /** Linha plana de um no, no formato que o painel consome. */
+  static layerItem(node, depth = 0) {
+    return {
+      kind: 'node',
+      depth,
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      shapeType: node.shapeType || null,
+      parentId: node.parentId,
+      visible: node.visible,
+      locked: node.locked,
+      selected: node.selected
+    };
+  }
+
+  /** Cabecalho de pasta no formato do painel, com o estado agregado. */
+  static groupLayerItem(group, members, selectedId) {
+    return {
+      kind: 'group',
+      depth: 0,
+      id: group.id,
+      name: group.name,
+      collapsed: group.collapsed,
+      count: members.length,
+      // O olho e a trava da pasta respondem pelo conjunto: cheios querem
+      // dizer "todos iguais"; clicar leva todos para o outro estado. Uma
+      // pasta vazia cai no `every` vazio, que e verdadeiro.
+      visible: members.every((item) => item.visible),
+      locked: members.every((item) => item.locked),
+      selected: members.some((item) => item.id === selectedId)
+    };
+  }
+
+  /**
+   * Espelho do painel de camadas, do topo da pilha para o fundo: as
+   * linhas de no na ordem do z, e cada pasta no lugar do membro mais
+   * alto, com os filhos indentados logo abaixo -- uma vez so, porque o
+   * resto da caminhada pula quem ja saiu. Pasta recolhida nao lista os
+   * filhos. A ordem do z nao muda por causa disso: a pasta e so a
+   * leitura do painel.
+   */
   get layers() {
-    return this.nodes
-      .slice()
-      .reverse()
-      .map((node) => ({
-        id: node.id,
-        name: node.name,
-        type: node.type,
-        shapeType: node.shapeType || null,
-        visible: node.visible,
-        locked: node.locked,
-        selected: node.selected
-      }));
+    const rows = [];
+    const emitted = new Set();
+    for (let i = this.nodes.length - 1; i >= 0; i -= 1) {
+      const node = this.nodes[i];
+      const group = node.parentId ? this.getGroup(node.parentId) : null;
+      if (!group) {
+        rows.push(UIDesign.layerItem(node));
+        continue;
+      }
+      if (emitted.has(group.id)) continue;
+      emitted.add(group.id);
+      const members = this.groupMembers(group.id);
+      rows.push(UIDesign.groupLayerItem(group, members, this.selectedId));
+      if (group.collapsed) continue;
+      members
+        .slice()
+        .reverse()
+        .forEach((member) => rows.push(UIDesign.layerItem(member, 1)));
+    }
+    // Pasta vazia nao tem membro para ancorar: fica no fim da lista.
+    // Sem isso a pasta recem-criada sumiria do painel, sem linha para
+    // renomear e sem lugar para soltar uma camada dentro.
+    this.groups.forEach((group) => {
+      if (!emitted.has(group.id)) {
+        rows.push(UIDesign.groupLayerItem(group, [], this.selectedId));
+      }
+    });
+    return rows;
   }
 
   getNode(id) {
@@ -242,23 +307,130 @@ export class UIDesign {
     return true;
   }
 
+  /* ---- Pastas do painel (grupos) ----
+
+     Uma pasta nao tem z nem geometria: e um nome e uma lista de
+     `parentId`. Por isso mover, ocultar ou travar a pasta sao so
+     escritas nos membros, e desfazer a pasta devolve todos a raiz sem
+     tocar no desenho nem no codigo gerado. */
+
+  static generateGroupId() {
+    return 'g' + UINode.generateId();
+  }
+
+  getGroup(id) {
+    return this.groups.find((group) => group.id === id) || null;
+  }
+
+  /** Membros da pasta, na ordem do z (o primeiro e o mais ao fundo). */
+  groupMembers(id) {
+    return this.nodes.filter((node) => node.parentId === id);
+  }
+
+  /** Nome padrao, contando as pastas que existem: "Grupo 1", "Grupo 2"... */
+  _nextGroupName() {
+    const taken = new Set(this.groups.map((group) => group.name));
+    let i = 1;
+    while (taken.has('Grupo ' + i)) i += 1;
+    return 'Grupo ' + i;
+  }
+
   /**
-   * Coloca o node na posicao `panelIndex` da lista de camadas,
-   * que e o array ao contrario: 0 e o topo da lista, a frente da
-   * pilha.
-   *
-   * A conversao para o indice do array acontece depois de tirar
-   * o node de la. Fazer antes desloca em um todos os indices do
-   * que sobrou, e o node cai na posicao vizinha da pedida.
+   * Cria uma pasta vazia. Nome vazio cai no padrao "Grupo N"; arrastar
+   * as camadas para dentro e o passo seguinte (nao ha selecao multipla).
    */
-  moveNodeTo(id, panelIndex) {
+  createGroup(name = null) {
+    const text = typeof name === 'string' ? name.trim() : '';
+    const group = {
+      id: UIDesign.generateGroupId(),
+      name: text || this._nextGroupName(),
+      collapsed: false
+    };
+    this.groups.push(group);
+    return group;
+  }
+
+  renameGroup(id, name) {
+    const group = this.getGroup(id);
+    const next = typeof name === 'string' ? name.trim() : '';
+    if (!group || !next || next === group.name) return false;
+    group.name = next;
+    return true;
+  }
+
+  toggleGroupCollapsed(id) {
+    const group = this.getGroup(id);
+    if (!group) return false;
+    group.collapsed = !group.collapsed;
+    return group.collapsed;
+  }
+
+  /**
+   * Poe o no na pasta `groupId`, ou devolve a raiz com `null`/id
+   * inexistente. Devolve se mudou alguma coisa: soltar uma camada na
+   * pasta em que ela ja esta nao redesenha nada.
+   */
+  setNodeGroup(nodeId, groupId) {
+    const node = this.getNode(nodeId);
+    const target = groupId && this.getGroup(groupId) ? groupId : null;
+    if (!node || node.parentId === target) return false;
+    node.parentId = target;
+    return true;
+  }
+
+  /** Desfaz a pasta: some o nome, e os membros voltam para a raiz. */
+  removeGroup(id) {
+    const index = this.groups.findIndex((group) => group.id === id);
+    if (index < 0) return null;
+    this.nodes.forEach((node) => {
+      if (node.parentId === id) node.parentId = null;
+    });
+    return this.groups.splice(index, 1)[0];
+  }
+
+  /** Olho da pasta: esconde se ha algum visivel, mostra se estao todos ocultos. */
+  toggleGroupVisibility(id) {
+    return this._setGroupFlag(id, 'visible');
+  }
+
+  /** Trava da pasta: o espelho do `toggleNodeLock`, para todos os membros. */
+  toggleGroupLock(id) {
+    const locked = this._setGroupFlag(id, 'locked');
+    if (locked && this.groupMembers(id).some((node) => node.id === this.selectedId)) {
+      this.deselectAll();
+    }
+    return locked;
+  }
+
+  _setGroupFlag(id, flag) {
+    const members = this.groupMembers(id);
+    if (!this.getGroup(id) || !members.length) return false;
+    const value = !members.every((node) => node[flag]);
+    members.forEach((node) => { node[flag] = value; });
+    return value;
+  }
+
+  /**
+   * Move o no para logo acima da linha `beforeId` na lista de camadas
+   * (que e o array ao contrario), ou para o fundo da pilha com `null`.
+   *
+   * O indice sai da linha de destino, e nao da contagem de linhas: as
+   * pastas mostram os filhos agrupados, entao a posicao visivel de uma
+   * linha pode nao coincidir com o indice dela no array -- contar linhas
+   * cairia no vizinho errado. A conversao acontece depois de tirar o no,
+   * para nao deslocar em um os indices do que sobra.
+   */
+  moveNodeTo(id, beforeId = null) {
     const from = this.nodes.findIndex((node) => node.id === id);
     if (from < 0) return false;
 
-    const wanted = UINode.toNumber(panelIndex, 0);
     const [node] = this.nodes.splice(from, 1);
-    const clamped = Math.max(0, Math.min(this.nodes.length, wanted));
-    this.nodes.splice(this.nodes.length - clamped, 0, node);
+    let target = 0;
+    if (beforeId) {
+      const index = this.nodes.findIndex((item) => item.id === beforeId);
+      target = index < 0 ? 0 : index + 1;
+    }
+    this.nodes.splice(target, 0, node);
     return true;
   }
 
@@ -419,6 +591,11 @@ export class UIDesign {
     return {
       version: UIDesign.FILE_VERSION,
       nodes: this.nodes.map((node) => node.toJSON()),
+      groups: this.groups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        collapsed: group.collapsed
+      })),
       selectedId: this.selectedId,
       zoom: this.zoom,
       panX: this.panX,
@@ -457,6 +634,27 @@ export class UIDesign {
       const node = UIDesign.nodeFromJSON(item);
       if (node) this.nodes.push(node);
       else skipped += 1;
+    });
+
+    // Pastas do painel: id repetido ou ausente nao entra (seria uma pasta
+    // inalcancavel), e o nome vazio vira "Grupo" em vez de linha muda.
+    this.groups = [];
+    const seenGroups = new Set();
+    if (Array.isArray(data.groups)) {
+      data.groups.forEach((group) => {
+        if (!group || typeof group.id !== 'string' || !group.id || seenGroups.has(group.id)) return;
+        seenGroups.add(group.id);
+        this.groups.push({
+          id: group.id,
+          name: UINode.toText(group.name, 'Grupo'),
+          collapsed: group.collapsed === true
+        });
+      });
+    }
+    // `parentId` so vale se a pasta existir: arquivo editado a mao com a
+    // pasta ausente devolve o no para a raiz em vez de some-lo da lista.
+    this.nodes.forEach((node) => {
+      if (node.parentId && !this.getGroup(node.parentId)) node.parentId = null;
     });
 
     this.selectedId = null;

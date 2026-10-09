@@ -17,6 +17,12 @@
    resto do modulo. O arrasto so comeca depois de alguns
    pixels, senao o clique que seleciona e o duplo clique
    que renomeia param de funcionar.
+
+   As pastas (`UIDesign.groups`) aparecem como linhas de
+   grupo na lista: o cabecalho ocupa o lugar do membro mais
+   alto, os filhos vem indentados embaixo, e arrastar uma
+   camada para cima de um cabecalho a coloca na pasta. O
+   cabecalho nao e arrastavel -- nao tem z para reordenar.
    ============================================ */
 
 const ICON_BY_TYPE = {
@@ -31,6 +37,14 @@ const LOCK_ON = '<path fill="currentColor" d="M7 10V8a5 5 0 0110 0v2h1v10H6V10h1
 const LOCK_OFF = '<path fill="none" stroke="currentColor" stroke-width="1.8" d="M7 10V8a5 5 0 019.5-2M6 10h12v10H6V10z"/>';
 /** Duas folhas sobrepostas: o padrao de "duplicar" do Figma e do CSS. */
 const COPY = '<rect x="9" y="9" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M6 15H5a2 2 0 01-2-2V5a2 2 0 012-2h8a2 2 0 012 2v1"/>';
+
+/** Pasta fechada: a linha de grupo. */
+const GROUP = '<path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 7.2A1.2 1.2 0 014.2 6h4.1l1.7 2.2h9.8A1.2 1.2 0 0121 9.4v8.4A1.2 1.2 0 0119.8 19H4.2A1.2 1.2 0 013 17.8V7.2z"/>';
+const GROUP_OPEN = '<path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 7.2A1.2 1.2 0 014.2 6h4.1l1.7 2.2H17"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M4.6 19h12.9a1.2 1.2 0 001.2-.9l1.7-6.4a1.2 1.2 0 00-1.2-1.5H5.3a1.2 1.2 0 00-1.2.9L2.4 17.5A1.2 1.2 0 003.6 19z"/>';
+const UNGROUP = '<path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 7.2A1.2 1.2 0 014.2 6h4.1l1.7 2.2h9.8A1.2 1.2 0 0121 9.4v8.4A1.2 1.2 0 0119.8 19H4.2A1.2 1.2 0 013 17.8V7.2z"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M9 14h6"/>';
+const CARET_RIGHT = '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9.5 6l6 6-6 6"/>';
+const CARET_DOWN = '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9.5l6 6 6-6"/>';
+const PLUS = '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/>';
 
 /** Percorridos antes do clique virar arrasto, em px. */
 const DRAG_THRESHOLD = 4;
@@ -50,9 +64,19 @@ export class UILayerPanelView {
     this.onToggleVisible = null;   // (id) => void
     this.onToggleLock = null;      // (id) => void
     this.onRename = null;          // (id, name) => void
-    this.onMoveNode = null;        // (id, panelIndex) => void
+    this.onMoveNode = null;        // (id, beforeId|null) => void
     this.onDuplicate = null;       // (id) => void
     this.onRequestEditText = null; // (node) => void
+
+    // Pastas (grupos): criar, entrar/sair por arrasto, renomear, recolher,
+    // olho/trava do conjunto e desfazer.
+    this.onCreateGroup = null;         // () => void
+    this.onJoinGroup = null;           // (id, groupId) => void
+    this.onRenameGroup = null;         // (groupId, name) => void
+    this.onToggleGroup = null;         // (groupId) => void
+    this.onToggleGroupVisible = null;  // (groupId) => void
+    this.onToggleGroupLock = null;     // (groupId) => void
+    this.onRemoveGroup = null;         // (groupId) => void
 
     // referencias estaveis: as linhas sao recriadas a cada render,
     // e o arrasto precisa tirar o listener de cima da linha certa.
@@ -69,7 +93,19 @@ export class UILayerPanelView {
 
     const header = document.createElement('div');
     header.className = 'design-panel-header';
-    header.textContent = 'Camadas';
+
+    const title = document.createElement('span');
+    title.textContent = 'Camadas';
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'design-layer-action is-add-group';
+    add.title = 'Novo grupo';
+    add.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14">' + PLUS + '</svg>';
+    add.addEventListener('click', () => this.onCreateGroup && this.onCreateGroup());
+
+    header.appendChild(title);
+    header.appendChild(add);
 
     this.list = document.createElement('div');
     this.list.className = 'design-layers-list';
@@ -95,12 +131,15 @@ export class UILayerPanelView {
       return;
     }
 
-    layers.forEach((item) => this.list.appendChild(this._buildRow(item)));
+    layers.forEach((item) => {
+      this.list.appendChild(item.kind === 'group' ? this._buildGroupRow(item) : this._buildRow(item));
+    });
   }
 
   _buildRow(item) {
     const row = document.createElement('div');
     row.className = 'design-layer'
+      + (item.depth ? ' is-child' : '')
       + (item.selected ? ' is-selected' : '')
       + (item.visible ? '' : ' is-hidden');
     row.dataset.id = item.id;
@@ -143,7 +182,56 @@ export class UILayerPanelView {
         this.onRequestEditText(node);
         return;
       }
-      this._startRename(row, name, item.id);
+      this._startRename(row, name, item.id, this.onRename);
+    });
+
+    return row;
+  }
+
+  /**
+   * Linha de pasta: seta de recolher, nome (duplo clique renomeia) e as
+   * acoes do conjunto. Clicar na linha recolhe/expande -- nao ha o que
+   * selecionar, porque a pasta nao e um no.
+   */
+  _buildGroupRow(item) {
+    const row = document.createElement('div');
+    row.className = 'design-layer design-layer-group'
+      + (item.collapsed ? ' is-collapsed' : '')
+      + (item.selected ? ' is-active' : '')
+      + (item.visible ? '' : ' is-hidden');
+    row.dataset.group = item.id;
+    row.title = item.count + (item.count === 1 ? ' camada' : ' camadas');
+
+    row.appendChild(this._iconButton(item.collapsed ? CARET_RIGHT : CARET_DOWN,
+      item.collapsed ? 'Expandir grupo' : 'Recolher grupo', 'is-caret',
+      () => this.onToggleGroup && this.onToggleGroup(item.id)));
+
+    const icon = document.createElement('span');
+    icon.className = 'design-layer-icon';
+    icon.innerHTML = item.collapsed ? GROUP : GROUP_OPEN;
+
+    const name = document.createElement('span');
+    name.className = 'design-layer-name';
+    name.textContent = item.name;
+
+    row.appendChild(icon);
+    row.appendChild(name);
+    row.appendChild(this._iconButton(item.visible ? EYE_ON : EYE_OFF,
+      item.visible ? 'Ocultar grupo' : 'Mostrar grupo', 'is-visible-toggle',
+      () => this.onToggleGroupVisible && this.onToggleGroupVisible(item.id)));
+    row.appendChild(this._iconButton(item.locked ? LOCK_ON : LOCK_OFF,
+      item.locked ? 'Destravar grupo' : 'Travar grupo', 'is-lock-toggle',
+      () => this.onToggleGroupLock && this.onToggleGroupLock(item.id)));
+    row.appendChild(this._iconButton(UNGROUP, 'Desagrupar (as camadas voltam para a raiz)', 'is-ungroup',
+      () => this.onRemoveGroup && this.onRemoveGroup(item.id)));
+
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.design-layer-action')) return;
+      if (this.onToggleGroup) this.onToggleGroup(item.id);
+    });
+    row.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.design-layer-action')) return;
+      this._startRename(row, name, item.id, this.onRenameGroup);
     });
 
     return row;
@@ -181,7 +269,8 @@ export class UILayerPanelView {
       startX: e.clientX,
       startY: e.clientY,
       active: false,
-      target: 0,
+      drop: null,
+      dropKey: null,
       ghost: null
     };
 
@@ -204,10 +293,12 @@ export class UILayerPanelView {
     e.preventDefault();
     drag.ghost.style.transform = 'translate(' + (e.clientX + 12) + 'px,' + (e.clientY + 10) + 'px)';
 
-    const target = this._dropIndexFor(e.clientY);
-    if (target !== drag.target) {
-      drag.target = target;
-      this._showIndicator(target);
+    const drop = this._dropTarget(e.clientY);
+    const key = drop.join ? 'g:' + drop.join : 'n:' + (drop.beforeId || '');
+    if (key !== drag.dropKey) {
+      drag.drop = drop;
+      drag.dropKey = key;
+      this._showDrop(drop);
     }
     this._autoScroll(e.clientY);
   }
@@ -237,17 +328,28 @@ export class UILayerPanelView {
   }
 
   /**
-   * Indice de destino na lista *sem* a linha arrastada, que e o que
-   * `moveNodeTo` espera. A faixa acima da metade da linha aponta o
-   * destino; abaixo de todas as linhas, o fundo da pilha.
+   * Onde o arrasto cai. Sobre a faixa de uma pasta vira `{ join }`: a
+   * camada entra nela. Entre as linhas de no vira `{ beforeId }`, o id da
+   * linha que fica logo abaixo do ponto solto (`null` = fundo da pilha).
+   * As linhas de pasta nao servem de destino de ordem -- pasta nao tem z.
+   * A linha arrastada nao entra na conta, porque sai da lista.
    */
-  _dropIndexFor(y) {
+  _dropTarget(y) {
     const rows = this._otherRows();
-    for (let i = 0; i < rows.length; i += 1) {
-      const box = rows[i].getBoundingClientRect();
-      if (y < box.top + box.height / 2) return i;
+    const over = rows.find((row) => {
+      const box = row.getBoundingClientRect();
+      return y >= box.top && y <= box.bottom;
+    });
+    if (over && over.dataset.group) return { join: over.dataset.group, row: over };
+
+    let beforeId = null;
+    let target = null;
+    for (const row of rows) {
+      if (row.dataset.group) continue;
+      const box = row.getBoundingClientRect();
+      if (y < box.top + box.height / 2) { beforeId = row.dataset.id; target = row; break; }
     }
-    return rows.length;
+    return { beforeId, row: target };
   }
 
   /** Linhas da lista fora a linha arrastada. */
@@ -256,8 +358,21 @@ export class UILayerPanelView {
       .filter((row) => row !== this.drag.row);
   }
 
-  _showIndicator(index) {
-    this.list.insertBefore(this.indicator, this._otherRows()[index] || null);
+  _showDrop(drop) {
+    this._clearDropMark();
+    if (drop.join) {
+      drop.row.classList.add('is-drop-target');
+      this._dropRow = drop.row;
+      return;
+    }
+    this.list.insertBefore(this.indicator, drop.row || null);
+  }
+
+  _clearDropMark() {
+    if (this._dropRow) {
+      this._dropRow.classList.remove('is-drop-target');
+      this._dropRow = null;
+    }
   }
 
   _autoScroll(y) {
@@ -283,7 +398,15 @@ export class UILayerPanelView {
     this._swallowClick = true;
     setTimeout(() => { this._swallowClick = false; }, 0);
 
-    if (this.onMoveNode) this.onMoveNode(drag.id, drag.target);
+    // Solta na pasta: entra nela (ou sai, se estava e cai abaixo do
+    // bloco). O modelo decide a pasta final pelo que ficou logo abaixo
+    // da camada, entao `beforeId` e o que basta nos dois casos.
+    const drop = drag.drop;
+    if (drop && drop.join) {
+      if (this.onJoinGroup) this.onJoinGroup(drag.id, drop.join);
+    } else if (this.onMoveNode) {
+      this.onMoveNode(drag.id, drop ? drop.beforeId : null);
+    }
   }
 
   /** Aborta o arrasto sem mover nada: o redesenho chegou antes dele. */
@@ -312,6 +435,7 @@ export class UILayerPanelView {
     drag.row.classList.remove('is-dragging');
     if (this.list) this.list.classList.remove('is-reordering');
     if (drag.ghost) drag.ghost.remove();
+    this._clearDropMark();
     if (this.indicator) {
       this.indicator.remove();
       this.indicator = null;
@@ -319,8 +443,11 @@ export class UILayerPanelView {
     return drag;
   }
 
-  /** Renomear no lugar: um input na propria linha, Enter confirma, Esc volta. */
-  _startRename(row, nameEl, id) {
+  /**
+   * Renomear no lugar: um input na propria linha, Enter confirma, Esc
+   * volta. `handler` decide onde o nome novo vai (no de camada ou pasta).
+   */
+  _startRename(row, nameEl, id, handler) {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'design-layer-rename';
@@ -332,7 +459,7 @@ export class UILayerPanelView {
       done = true;
       const value = input.value.trim();
       input.remove();
-      if (commit && value && this.onRename) this.onRename(id, value);
+      if (commit && value && handler) handler(id, value);
       else this.render();
     };
 
@@ -346,5 +473,13 @@ export class UILayerPanelView {
     row.replaceChild(input, nameEl);
     input.focus();
     input.select();
+  }
+
+  /** Abre o nome de uma pasta pelo id -- usado quando ela acaba de nascer. */
+  startRenameGroup(groupId) {
+    const row = Array.from(this.list.querySelectorAll('.design-layer-group'))
+      .find((item) => item.dataset.group === groupId);
+    const name = row ? row.querySelector('.design-layer-name') : null;
+    if (name) this._startRename(row, name, groupId, this.onRenameGroup);
   }
 }
