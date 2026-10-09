@@ -154,6 +154,26 @@ objeto, sem caso especial.
   não no objeto, então nunca há traço órfão; a miniatura da página mostra só esse
   raster, sobre o branco do papel.
 
+### Modo Design (UI/UX)
+- **Linha com encaixe angular** — na ferramenta Linha (`L`) do modo Design,
+  segurar **Shift** durante o arrasto trava o traço nos múltiplos de 45°
+  (0°, 45°, 90°, 135°…), mantendo o comprimento do arrasto: a linha gira até
+  a diagonal mais próxima do cursor em vez de encurtar. O encaixe é feito
+  por tabela de direções (`UIDesignView.snapAngle45`), com os vetores
+  exatos para as horizontais e verticais não caírem em `6e-17` de
+  ponto flutuante — a "reta" nasce reta de verdade.
+- **Preview e linha nascida são a mesma conta** — o que se vê arrastando e o
+  nó criado no `pointerup` passam pela mesma função (`_createBounds`), então
+  a linha nunca troca de direção no soltar do botão. Com Shift o rótulo do
+  preview deixa de mostrar `largura x altura` e mostra o ângulo travado.
+- **O Shift reage sem mover o mouse** — apertar ou soltar a tecla durante o
+  arrasto já reencaixa ou solta a linha (`setShift`, chamado pelos
+  `keydown`/`keyup` do `UIDesignController`), sem exigir um movimento do
+  cursor; quem decide no fim é o `shiftKey` do próprio `pointerup`.
+- **Sem Shift a linha continua livre** — como antes: ela nunca passou pelo
+  encaixe da grade, e o Shift nas demais ferramentas segue desligando a
+  grade, como já fazia.
+
 ### Atalhos de teclado
 | Tecla | Ação |
 | --- | --- |

@@ -416,12 +416,25 @@ export class UIDesignController {
   }
 
   _onKeyUp(e) {
-    if (!this.active || e.key !== ' ') return;
+    if (!this.active) return;
+    if (e.key === 'Shift') {
+      if (this.views.designView) this.views.designView.setShift(false);
+      return;
+    }
+    if (e.key !== ' ') return;
     if (this.views.designView) this.views.designView.setSpace(false);
   }
 
   _onKeyDown(e) {
     if (!this.active) return;
+
+    // Shift durante o arrasto de criacao: reencaixa (ou solta) o preview na
+    // hora, sem esperar um movimento do mouse. Nao para a propagacao -- a
+    // lousa nao usa Shift, e o `pointerup` e quem confirma o valor final.
+    if (e.key === 'Shift') {
+      if (this.views.designView) this.views.designView.setShift(true);
+      return;
+    }
 
     if (e.key === ' ' && !this._isTyping(e)) {
       if (this.views.designView) this.views.designView.setSpace(true);

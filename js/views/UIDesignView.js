@@ -233,6 +233,21 @@ export class UIDesignView {
     if (this.svg) this.svg.classList.toggle('is-panning', this.spaceDown);
   }
 
+  /**
+   * Shift premido ou solto durante um arrasto de criacao. O `pointermove`
+   * so le `e.shiftKey` quando o mouse anda, entao sem isto o encaixe de 45
+   * graus da linha so mudaria ao mover o cursor -- apertar Shift parado
+   * sobre o preview ficaria sem efeito. Fora de um gesto de criacao nao ha
+   * o que atualizar, e o valor do proprio evento decide no `pointerup`.
+   */
+  setShift(down) {
+    if (!this.gesture || this.gesture.type !== 'create') return;
+    const next = down === true;
+    if (this.gesture.shiftKey === next) return;
+    this.gesture.shiftKey = next;
+    this._renderOverlay();
+  }
+
   focus() {
     if (this.svg && this.svg.focus) this.svg.focus();
   }
@@ -1270,11 +1285,17 @@ export class UIDesignView {
     }
 
     if (gesture.tool === 'line') {
+      let dx = gesture.current.x - gesture.start.x;
+      let dy = gesture.current.y - gesture.start.y;
+      // `disableSnap` e o Shift. Para as demais ferramentas ele desliga a
+      // grade; na linha a grade nunca entrou, e o mesmo botao liga o
+      // encaixe angular -- mesma conta do preview, que chama isto.
+      if (disableSnap) ({ dx, dy } = UIDesignView.snapAngle45(dx, dy));
       return {
         x: gesture.start.x,
         y: gesture.start.y,
-        width: gesture.current.x - gesture.start.x,
-        height: gesture.current.y - gesture.start.y
+        width: dx,
+        height: dy
       };
     }
 
