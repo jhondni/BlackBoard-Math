@@ -46,10 +46,36 @@
    em questao e subtraido de cada medida (`cssFor`
    recebe a origem). E o que faz o que o canvas mostra
    dentro do frame continuar dentro do .screen quando o
-   frame nao esta em (0,0). Hierarquia de pai de verdade
+   frame nao esta em (0,0).    Hierarquia de pai de verdade
    so viria com frame dentro de frame usando o mais
    externo, e nada aqui precisa disso agora.
+
+   ---- Pastas com tag ----
+
+   Uma pasta do painel nao muda o codigo por existir: as
+   linhas continuam sendo so organizacao. A excecao e a
+   `tag` da pasta (`GroupTagCatalog`). Com tag, o frame
+   inteiro ate agora chapado ganha UM nivel: os membros
+   da pasta saem da lista de irmaos e entram num elemento
+   real daquela tag (`<button>`, `<a>`, `<input>`...),
+   posicionado na bbox que envolve os membros. O resto da
+   arvore segue chapado.
+
+   O `nX` do embrulho e da mesma sequencia dos nos -- a
+   numeracao e a ordem em que os elementos aparecem no
+   DOM, com o embrulho antes dos filhos --, entao o CSS
+   fica uma lista so. Cada membro ja tem as coordenadas do
+   design; a unica diferenca e que a `origin` deles passa a
+   ser a bbox da pasta (e nao mais o canto do frame), para
+   o `left`/`top` sair relativo ao embrulho. O embrulho em
+   si e posicionado relativo ao frame, como qualquer no.
+
+   Elemento que nao aceita filhos (`input`) nao embrulha
+   nada: o texto do primeiro membro de texto vira o
+   `placeholder` e os outros membros ficam de fora.
    ============================================ */
+
+import { findGroupTag } from './GroupTagCatalog.js';
 
 /** Escapa texto que vai para dentro de um atributo ou entre tags. */
 function esc(value) {
@@ -64,6 +90,12 @@ function esc(value) {
 function px(value) {
   const n = Math.round(Number(value) * 100) / 100;
   return n + 'px';
+}
+
+/** Recua cada linha de um trecho -- o codigo gerado fica legivel. */
+function indent(text, spaces) {
+  const pad = ' '.repeat(spaces);
+  return String(text).split('\n').map((line) => (line ? pad + line : line)).join('\n');
 }
 
 export class DesignCodeRenderer {
@@ -132,6 +164,97 @@ export class DesignCodeRenderer {
     return design.nodes.filter(
       (node) => node !== frame && DesignCodeRenderer.innermostFrame(design, node) === frame
     );
+  }
+
+  /* ---- Agrupar por tag ----
+     Ver a secao "Pastas com tag" no cabecalho. Um no entra num embrulho
+     quando a pasta dele tem uma tag conhecida; as pastas sao de um nivel
+     so (nao ha pasta dentro de pasta), entao os membros nunca sao outro
+     embrulho. */
+
+  /** A pasta com tag a que o no pertence, ou `null`. */
+  static taggedGroupOf(design, node) {
+    if (!design || !node || !node.parentId) return null;
+    const group = typeof design.getGroup === 'function' ? design.getGroup(node.parentId) : null;
+    if (!group || !findGroupTag(group.tag)) return null;
+    return group;
+  }
+
+  /**
+   * A lista da tela com os embrulhos no lugar: cada item e um no solto
+   * (`{ kind: 'node', node }`) ou uma pasta com tag (`{ kind: 'group',
+   * group, members }`). O embrulho ocupa a posicao do membro mais ao
+   * fundo -- a ordem da lista continua sendo o z, e o membro mais ao
+   * fundo e quem ancora o conjunto na pilha.
+   */
+  static tree(design, contents) {
+    const groupOf = new Map();
+    const membersOf = new Map();
+    contents.forEach((node) => {
+      const group = DesignCodeRenderer.taggedGroupOf(design, node);
+      if (!group) return;
+      groupOf.set(node, group);
+      if (!membersOf.has(group.id)) membersOf.set(group.id, []);
+      membersOf.get(group.id).push(node);
+    });
+
+    const emitted = new Set();
+    const items = [];
+    contents.forEach((node) => {
+      const group = groupOf.get(node);
+      if (!group) {
+        items.push({ kind: 'node', node });
+        return;
+      }
+      if (emitted.has(group.id)) return;
+      emitted.add(group.id);
+      items.push({ kind: 'group', group, members: membersOf.get(group.id) });
+    });
+    return items;
+  }
+
+  /** Caixa alinhada aos eixos que envolve todos os membros. */
+  static unionBounds(nodes) {
+    return nodes.reduce((acc, node) => {
+      const b = node.getBounds();
+      return {
+        left: Math.min(acc.left, b.left),
+        top: Math.min(acc.top, b.top),
+        right: Math.max(acc.right, b.right),
+        bottom: Math.max(acc.bottom, b.bottom)
+      };
+    }, { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+  }
+
+  /**
+   * A "planta" da tela: os `steps` ja na ordem final do DOM, com o
+   * numero (`nX`) que o HTML e o CSS vao usar de casamento. O embrulho
+   * recebe o numero antes dos membros, entao `.n1` e o pai de `.n2`.
+   *
+   * Cada membro de um embrulho troca a origem: o `left`/`top` dele e
+   * relativo a bbox da pasta (`member.origin`), e nao mais ao canto do
+   * frame -- e o embrulho, esse sim, cai nas coordenadas do frame.
+   */
+  static plan(design, frame) {
+    const contents = DesignCodeRenderer.contentsOf(design, frame);
+    const items = DesignCodeRenderer.tree(design, contents);
+    const origin = { x: frame.x, y: frame.y };
+    const seq = { n: 0 };
+    const steps = [];
+
+    items.forEach((item) => {
+      if (item.kind === 'group') {
+        const index = ++seq.n;
+        const box = DesignCodeRenderer.unionBounds(item.members);
+        const memberOrigin = { x: box.left, y: box.top };
+        const members = item.members.map((node) => ({ node, index: ++seq.n, origin: memberOrigin }));
+        steps.push({ kind: 'group', group: item.group, index, box, origin, members });
+      } else {
+        steps.push({ kind: 'node', node: item.node, index: ++seq.n, origin });
+      }
+    });
+
+    return { contents, steps, names: DesignCodeRenderer.imageNames(contents) };
   }
 
   /* ---- CSS ---- */
@@ -286,8 +409,35 @@ export class DesignCodeRenderer {
     ].join('\n');
   }
 
-  /* ---- HTML ---- */
+  /** A regra de um no solto: o `cssFor` e, na linha, o `<i>` do tracejado. */
+  static cssForNode(node, index, origin) {
+    const base = DesignCodeRenderer.cssFor(node, index, origin);
+    return node.type === 'shape' && node.shapeType === 'line'
+      ? base + '\n' + DesignCodeRenderer.lineCss(node, index)
+      : base;
+  }
 
+  /**
+   * A regra do embrulho da pasta: uma caixa absoluta na bbox dos
+   * membros, mais o reset da tag (`GroupTagCatalog`). O reset vem
+   * DEPOIS da caixa de proposito -- um `appearance`/`border`/`padding`
+   * da tag ideal tem de poder vencer o que a caixa ja pos.
+   */
+  static cssForGroup(entry) {
+    const meta = findGroupTag(entry.group.tag);
+    const o = entry.origin || {};
+    const box = [
+      'position: absolute',
+      'left: ' + px(entry.box.left - (o.x || 0)),
+      'top: ' + px(entry.box.top - (o.y || 0)),
+      'width: ' + px(entry.box.right - entry.box.left),
+      'height: ' + px(entry.box.bottom - entry.box.top)
+    ];
+    (meta.css || []).forEach((prop) => box.push(prop));
+    return '.n' + entry.index + ' {\n  ' + box.join(';\n  ') + ';\n}';
+  }
+
+  /* ---- HTML ---- */
   /**
    * Imagens: o caminho que o codigo referencia, e nao o arquivo.
 
@@ -432,15 +582,58 @@ export class DesignCodeRenderer {
     return 'type-' + node.type;
   }
 
+  /** Classe do embrulho: `type-group` mais a tag, para dar para estilizar. */
+  static groupClass(group) {
+    return 'type-group tag-' + group.tag;
+  }
+
+  /**
+   * O embrulho de uma pasta com tag. Elemento que aceita filhos sai com
+   * os membros dentro, cada um indentado um nivel. Elemento vazio
+   * (`input`) nao tem onde por filho: o texto do primeiro membro de
+   * texto vira `placeholder` e o resto dos membros nao entra no HTML --
+   * e a unica leitura possivel de um `<input>` desenhado com um texto
+   * dentro dele.
+   */
+  static groupHtml(entry, names) {
+    const meta = findGroupTag(entry.group.tag);
+    const cls = 'n' + entry.index + ' ' + DesignCodeRenderer.groupClass(entry.group);
+    const id = 'n' + entry.index;
+
+    if (meta.void) {
+      let placeholder = '';
+      if (meta.placeholderFromText) {
+        const text = entry.members.map((m) => m.node).find((node) => node.type === 'text' && node.text);
+        if (text) placeholder = ' placeholder="' + esc(text.text) + '"';
+      }
+      return '<input class="' + cls + '" id="' + id + '"' + placeholder + '>';
+    }
+
+    const attrs = (meta.attrs || []).map((pair) => ' ' + pair[0] + '="' + esc(pair[1]) + '"').join('');
+    const inner = entry.members
+      .map((m) => '  ' + DesignCodeRenderer.htmlFor(m.node, m.index, names))
+      .join('\n');
+    return '<' + meta.tag + ' class="' + cls + '" id="' + id + '"' + attrs + '>\n'
+      + inner + '\n</' + meta.tag + '>';
+  }
+
   /**
    * A tela e so o frame e o que esta dentro dele: nada de botoes de
    * visibilidade nem de roupa da aplicacao por cima -- o arquivo baixado
    * tem de ser o desenho, e mais nada.
+   *
+   * `steps` e a lista da `plan`: nos soltos e embrulhos de pasta ja na
+   * ordem final, com o `nX` de cada um.
    */
-  static html(contents, names) {
-    const mapa = names || DesignCodeRenderer.imageNames(contents);
+  static html(steps, names) {
+    const mapa = names || new Map();
     const parts = ['<div class="screen" id="screen">'];
-    contents.forEach((node, i) => parts.push('  ' + DesignCodeRenderer.htmlFor(node, i + 1, mapa)));
+    steps.forEach((step) => {
+      const markup = step.kind === 'group'
+        ? DesignCodeRenderer.groupHtml(step, mapa)
+        : DesignCodeRenderer.htmlFor(step.node, step.index, mapa);
+      parts.push(indent(markup, 2));
+    });
     parts.push('</div>');
     return parts.join('\n');
   }
@@ -453,18 +646,20 @@ export class DesignCodeRenderer {
    * pessoa escreve a dela, e so o que estiver escrito la vai para o
    * arquivo.
    *
+   * @param {object} design - o documento (para resolver as pastas com tag)
    * @param {object} frame - o frame que virou tela
-   * @param {Array} contents - os nos da tela (`contentsOf`)
    * @returns {{title: string, html: string, css: string, js: string}}
    */
-  static screenFor(frame, contents) {
-    const origin = { x: frame.x, y: frame.y };
-    const rules = contents.map((node, i) => {
-      const index = i + 1;
-      const base = DesignCodeRenderer.cssFor(node, index, origin);
-      return node.type === 'shape' && node.shapeType === 'line'
-        ? base + '\n' + DesignCodeRenderer.lineCss(node, index)
-        : base;
+  static screenFor(design, frame) {
+    const plan = DesignCodeRenderer.plan(design, frame);
+    const rules = [];
+    plan.steps.forEach((step) => {
+      if (step.kind === 'group') {
+        rules.push(DesignCodeRenderer.cssForGroup(step));
+        step.members.forEach((m) => rules.push(DesignCodeRenderer.cssForNode(m.node, m.index, m.origin)));
+      } else {
+        rules.push(DesignCodeRenderer.cssForNode(step.node, step.index, step.origin));
+      }
     });
 
     const parts = [DesignCodeRenderer.baseCss(frame)];
@@ -473,7 +668,7 @@ export class DesignCodeRenderer {
 
     return {
       title: frame.name,
-      html: DesignCodeRenderer.html(contents),
+      html: DesignCodeRenderer.html(plan.steps, plan.names),
       css,
       js: ''
     };
@@ -506,6 +701,6 @@ export class DesignCodeRenderer {
   /** Caminho curto: frame -> conteudo -> tela. */
   static forFrame(design, frame) {
     if (!frame || frame.type !== 'frame') return null;
-    return DesignCodeRenderer.screenFor(frame, DesignCodeRenderer.contentsOf(design, frame));
+    return DesignCodeRenderer.screenFor(design, frame);
   }
 }

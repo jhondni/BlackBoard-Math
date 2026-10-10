@@ -199,6 +199,13 @@ export class UIDesignController {
       layers.onRemoveGroup = (groupId) => {
         if (this.design.removeGroup(groupId)) this.render();
       };
+      // A tag da pasta decide se ela vira um elemento de verdade no
+      // codigo gerado; trocar aqui so escreve no modelo e repinta. O
+      // `render` marca o codigo como velho, que e o aviso certo -- o
+      // HTML so muda quando a pessoa regerar.
+      layers.onSetGroupTag = (groupId, tag) => {
+        if (this.design.setGroupTag(groupId, tag)) this.render();
+      };
     }
 
     if (properties) {

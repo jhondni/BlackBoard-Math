@@ -1755,7 +1755,7 @@ body.design-mode #sidebar-tab { display: none; }
   text-overflow: ellipsis; white-space: nowrap;
 }
 /* ---- linhas de grupo (pastas) ---- */
-.design-layer-group { font-weight: 600; }
+.design-layer-group { font-weight: 600; gap: 6px; padding-left: 6px; padding-right: 6px; }
 .design-layer-group .design-layer-icon { color: var(--accent); }
 .design-layer-group.is-active { background: var(--accent-soft); border-color: var(--accent); }
 .design-layer-group.is-drop-target {
@@ -1776,6 +1776,17 @@ body.design-mode #sidebar-tab { display: none; }
   background: var(--bg-input); color: var(--text-primary);
   font-family: var(--font-sans); font-size: 12px; outline: none;
 }
+/* Seletor de tag da pasta: pequeno e monoespacado, para o nome das tags
+   (input, button, a...) caber sem competir com o nome da pasta. */
+.design-layer-tag {
+  flex: none; width: 58px; height: 20px; padding: 0 2px;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-input); color: var(--text-muted);
+  font-family: var(--font-mono); font-size: 10px;
+  cursor: pointer; outline: none;
+}
+.design-layer-tag:hover { border-color: var(--border-strong); }
+.design-layer-tag:focus { border-color: var(--accent); color: var(--text-primary); }
 .design-empty {
   padding: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.5;
 }

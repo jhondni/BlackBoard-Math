@@ -23,7 +23,13 @@
    alto, os filhos vem indentados embaixo, e arrastar uma
    camada para cima de um cabecalho a coloca na pasta. O
    cabecalho nao e arrastavel -- nao tem z para reordenar.
+
+   Cada cabecalho carrega tambem o seletor de tag
+   (`GroupTagCatalog`): escolhida uma, os membros viram um
+   elemento real dessa tag no codigo gerado.
    ============================================ */
+
+import { GROUP_TAGS } from '../renderers/GroupTagCatalog.js';
 
 const ICON_BY_TYPE = {
   frame: '<path fill="none" stroke="currentColor" stroke-width="1.8" d="M7 3v18M17 3v18M3 7h18M3 17h18"/>',
@@ -77,6 +83,7 @@ export class UILayerPanelView {
     this.onToggleGroupVisible = null;  // (groupId) => void
     this.onToggleGroupLock = null;     // (groupId) => void
     this.onRemoveGroup = null;         // (groupId) => void
+    this.onSetGroupTag = null;         // (groupId, tag|null) => void
 
     // referencias estaveis: as linhas sao recriadas a cada render,
     // e o arrasto precisa tirar o listener de cima da linha certa.
@@ -216,6 +223,7 @@ export class UILayerPanelView {
 
     row.appendChild(icon);
     row.appendChild(name);
+    row.appendChild(this._buildTagSelect(item));
     row.appendChild(this._iconButton(item.visible ? EYE_ON : EYE_OFF,
       item.visible ? 'Ocultar grupo' : 'Mostrar grupo', 'is-visible-toggle',
       () => this.onToggleGroupVisible && this.onToggleGroupVisible(item.id)));
@@ -226,15 +234,51 @@ export class UILayerPanelView {
       () => this.onRemoveGroup && this.onRemoveGroup(item.id)));
 
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.design-layer-action')) return;
+      if (e.target.closest('.design-layer-action, .design-layer-tag')) return;
       if (this.onToggleGroup) this.onToggleGroup(item.id);
     });
     row.addEventListener('dblclick', (e) => {
-      if (e.target.closest('.design-layer-action')) return;
+      if (e.target.closest('.design-layer-action, .design-layer-tag')) return;
       this._startRename(row, name, item.id, this.onRenameGroup);
     });
 
     return row;
+  }
+
+  /**
+   * O seletor de tag da pasta. A opcao vazia ("sem tag") e o padrao e
+   * mantem o comportamento antigo -- a pasta so organiza, sem entrar no
+   * codigo gerado. `click` e `pointerdown` param a propagacao para o
+   * clique no select nao recolher a pasta nem comecar um arrasto.
+   */
+  _buildTagSelect(item) {
+    const select = document.createElement('select');
+    select.className = 'design-layer-tag';
+    select.title = 'Tag HTML da pasta no código gerado';
+
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'sem tag';
+    select.appendChild(none);
+
+    GROUP_TAGS.forEach((entry) => {
+      const option = document.createElement('option');
+      option.value = entry.tag;
+      option.textContent = entry.tag;
+      select.appendChild(option);
+    });
+
+    // Valor guardado que nao esta no catalogo (arquivo editado a mao)
+    // cai na opcao vazia em vez de o select ficar em branco.
+    select.value = GROUP_TAGS.some((entry) => entry.tag === item.tag) ? item.tag : '';
+
+    select.addEventListener('click', (e) => e.stopPropagation());
+    select.addEventListener('pointerdown', (e) => e.stopPropagation());
+    select.addEventListener('change', () => {
+      if (this.onSetGroupTag) this.onSetGroupTag(item.id, select.value || null);
+    });
+
+    return select;
   }
 
   _iconButton(svg, title, modifier, onClick) {
@@ -260,7 +304,7 @@ export class UILayerPanelView {
    */
   _dragStart(e, row, id) {
     if (this.drag || e.button !== 0) return;
-    if (e.target.closest('.design-layer-action, .design-layer-rename')) return;
+    if (e.target.closest('.design-layer-action, .design-layer-rename, .design-layer-tag')) return;
 
     this.drag = {
       id,

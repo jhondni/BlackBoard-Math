@@ -29,6 +29,14 @@ import { UIText } from './UIText.js';
    `nodes` continua sendo o z e a geometria continua em
    coordenadas do canvas. E o que permite agrupar e
    desagrupar sem tocar no desenho nem no codigo gerado.
+
+   A pasta tem tambem um `tag` opcional (`null` por padrao):
+   vazio, ela continua sendo so organizacao do painel; com
+   uma tag (`button`, `a`, `input`...), o `DesignCodeRenderer`
+   embrulha os membros num elemento real dessa tag na saida.
+   A lista de tags validas mora no `GroupTagCatalog` -- aqui
+   so a normalizacao defensiva, para um arquivo editado a mao
+   nao guardar lixo.
    ============================================ */
 
 /** Distancia maxima, em px de design, para um valor grudar na guia. */
@@ -92,6 +100,7 @@ export class UIDesign {
       id: group.id,
       name: group.name,
       collapsed: group.collapsed,
+      tag: group.tag || null,
       count: members.length,
       // O olho e a trava da pasta respondem pelo conjunto: cheios querem
       // dizer "todos iguais"; clicar leva todos para o outro estado. Uma
@@ -312,7 +321,11 @@ export class UIDesign {
      Uma pasta nao tem z nem geometria: e um nome e uma lista de
      `parentId`. Por isso mover, ocultar ou travar a pasta sao so
      escritas nos membros, e desfazer a pasta devolve todos a raiz sem
-     tocar no desenho nem no codigo gerado. */
+     tocar no desenho nem no codigo gerado.
+
+     A excecao e a `tag`: escolhida a tag, a pasta deixa de ser
+     invisivel para o codigo gerado e passa a virar um elemento real na
+     saida (`DesignCodeRenderer`). Fora isso, a pasta segue so painel. */
 
   static generateGroupId() {
     return 'g' + UINode.generateId();
@@ -344,7 +357,8 @@ export class UIDesign {
     const group = {
       id: UIDesign.generateGroupId(),
       name: text || this._nextGroupName(),
-      collapsed: false
+      collapsed: false,
+      tag: null
     };
     this.groups.push(group);
     return group;
@@ -363,6 +377,29 @@ export class UIDesign {
     if (!group) return false;
     group.collapsed = !group.collapsed;
     return group.collapsed;
+  }
+
+  /**
+   * Normaliza uma tag de pasta, ou `null`. Aceita so o nome cru de um
+   * elemento (`button`, `a`, `input`...) -- minusculo, sem espaco, sem
+   * `<`/`>`/`/`, para um arquivo editado a mao nao guardar uma tag
+   * quebrada. NAO confere contra a lista de `GroupTagCatalog`: quem
+   * emite e o renderer, e so as tags conhecidas viram elemento -- as
+   * demais sao guardadas como estao e simplesmente nao aparecem.
+   */
+  static normalizeGroupTag(value) {
+    const text = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    return /^[a-z][a-z0-9-]*$/.test(text) ? text : null;
+  }
+
+  /** Define a tag da pasta (`null` limpa). Devolve se mudou algo. */
+  setGroupTag(id, tag) {
+    const group = this.getGroup(id);
+    if (!group) return false;
+    const next = UIDesign.normalizeGroupTag(tag);
+    if (next === (group.tag || null)) return false;
+    group.tag = next;
+    return true;
   }
 
   /**
@@ -594,7 +631,8 @@ export class UIDesign {
       groups: this.groups.map((group) => ({
         id: group.id,
         name: group.name,
-        collapsed: group.collapsed
+        collapsed: group.collapsed,
+        tag: group.tag || null
       })),
       selectedId: this.selectedId,
       zoom: this.zoom,
@@ -647,7 +685,8 @@ export class UIDesign {
         this.groups.push({
           id: group.id,
           name: UINode.toText(group.name, 'Grupo'),
-          collapsed: group.collapsed === true
+          collapsed: group.collapsed === true,
+          tag: UIDesign.normalizeGroupTag(group.tag)
         });
       });
     }

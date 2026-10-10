@@ -220,6 +220,16 @@ objeto, sem caso especial.
   não mexe no desenho. O olho e a trava da pasta valem para o conjunto (acendem
   quando todos os membros estão visíveis/destravados) e levam todos ao outro
   estado num clique. Não há pastas dentro de pastas: um nível só.
+- **Tag de grupo** — cada cabeçalho de pasta tem um seletor de tag (**sem tag**
+  por padrão). Escolhida uma (`button`, `a`, `input`, `form`, `label`, `nav`…),
+  o `DesignCodeRenderer` embrulha os membros da pasta num elemento real dessa
+  tag na aba Codigo/HTML, posicionado na caixa que envolve os membros, e injeta
+  o *reset* da tag (o `<button>` sem a borda/fundo nativos, o `<a>` sem
+  sublinhado, o `<input>` sem borda/outline…). Não é uma hierarquia de desenho:
+  o canvas e o restante da árvore seguem chapados. Só valem as tags do preset
+  (`GroupTagCatalog`); uma tag desconhecida num arquivo editado à mão é ignorada.
+  Em elemento que não aceita filhos (`input`), o texto do primeiro membro de
+  texto vira `placeholder` e os demais membros ficam de fora do HTML.
 
 ### Atalhos de teclado
 | Tecla | Ação |
