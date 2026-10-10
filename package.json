@@ -1,0 +1,55 @@
+{
+  "name": "lousa-virtual",
+  "version": "1.0.0",
+  "description": "Lousa Virtual - Quadro branco digital com LaTeX, desenho livre e graficos",
+  "author": "UNIVESP PI",
+  "license": "MIT",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "build": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.univesp.lousavirtual",
+    "productName": "Lousa Virtual",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "js/**/*",
+      "assets/**/*",
+      "vendor/**/*",
+      "index.html",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "katex": "^0.19.0"
+  },
+  "allowScripts": {
+    "electron@44.7.0": true
+  }
+}
