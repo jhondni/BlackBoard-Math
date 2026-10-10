@@ -84,14 +84,16 @@ export class UIDesignController {
       toolbar.onWorkspaceChange = (workspace) => this.setWorkspace(workspace);
     }
 
-    // A aba de codigo nao pede o arquivo ao controller: ela monta o texto
-    // com o gerador e so entrega o arquivo pronto (so o frame selecionado,
-    // num HTML unico, com o CSS por dentro e o JavaScript, se houver).
+    // A aba de codigo monta o texto com o gerador e entrega o arquivo
+    // pronto: um HTML unico (so o frame selecionado, com o CSS por dentro
+    // e o JavaScript, se houver) ou um .zip quando a tela tem imagem --
+    // nesse caso o HTML referencia `imagens/...` e o pacote leva a pasta
+    // junto.
     // O download continua sendo do controller, como o do SVG.
     if (code) {
-      code.onDownload = (fileName, text) => {
-        UIDesignController.download(new Blob([text], { type: 'text/html' }), fileName);
-        this._toast('HTML baixado em ' + fileName);
+      code.onDownload = (fileName, blob) => {
+        UIDesignController.download(blob, fileName);
+        this._toast('Baixado em ' + fileName);
       };
     }
 

@@ -288,7 +288,97 @@ export class DesignCodeRenderer {
 
   /* ---- HTML ---- */
 
-  static htmlFor(node, index) {
+  /**
+   * Imagens: o caminho que o codigo referencia, e nao o arquivo.
+
+   * O `src` do modelo e um data URL -- um arquivo inteiro embutido no
+   * HTML. numa tela de varias imagens isso vira uma parede de base64
+   * ilegivel, que nao da para versionar nem editar. O modelo continua
+   * guardando o data URL (`UIImage.js` ja explica por que: o
+   * `.uidesign.json` tem de valer sozinho); quem sai daqui leva
+   * `imagens/imagem-N.ext` no lugar, com os bytes indo no pacote do
+   * download.
+   */
+  static isDataUrl(src) {
+    return typeof src === 'string' && src.slice(0, 5) === 'data:';
+  }
+
+  /** A extensao vem do MIME do proprio data URL: `image/png` -> `png`. */
+  static imageExt(src) {
+    const pos = src.indexOf(',');
+    const header = src.slice(5, pos === -1 ? src.length : pos);
+    const mime = header.split(';')[0].toLowerCase();
+    const sub = mime.split('/')[1] || '';
+    // Só o que e extensao de verdade: `jpeg` e o unico subtype comum que
+    // se escreve de outro jeito no disco; o resto de um MIME estranho
+    // (`image/x-qualquer-coisa`) vira `img`, que pelo menos abre.
+    if (sub === 'jpeg') return 'jpg';
+    const known = ['png', 'jpg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'];
+    return known.indexOf(sub) !== -1 ? sub : 'img';
+  }
+
+  /**
+   * Um nome por imagem, gerado da posicao dela na tela:
+   * `imagens/imagem-1.png`, `imagens/imagem-2.png`...
+   *
+   * A mesma data URL em dois nos vira UM arquivo so -- a regra e por
+   * conteudo, nao por no, senao a pasta de imagens sairia duplicada. URLs
+   * que nao sao data URL ficam de fora: elas ja sao uma referencia e
+   * viajam no codigo do jeito que estao.
+   */
+  static imageNames(contents) {
+    const names = new Map();
+    let ordem = 0;
+    contents.forEach((node) => {
+      if (node.type !== 'image' || !DesignCodeRenderer.isDataUrl(node.src)) return;
+      if (names.has(node.src)) return;
+      ordem += 1;
+      names.set(node.src, 'imagens/imagem-' + ordem + '.' + DesignCodeRenderer.imageExt(node.src));
+    });
+    return names;
+  }
+
+  /** Os bytes de um data URL, para o ZIP -- `null` se nao der para ler. */
+  static dataUrlBytes(src) {
+    try {
+      const pos = src.indexOf(',');
+      const header = src.slice(5, pos === -1 ? src.length : pos);
+      const payload = pos === -1 ? '' : src.slice(pos + 1);
+      if (!header.endsWith(';base64')) return new TextEncoder().decode(payload);
+      const bin = atob(payload);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * O pacote de imagens do download: os MESMOS nomes que o HTML
+   * referencia, com os bytes tirados do data URL do modelo. Deduplicado
+   * por conteudo, igual `imageNames` -- sao as duas faces da mesma lista.
+   *
+   * @param {Array} contents - os nos da tela
+   * @returns {Array<{nome:string, dados:Uint8Array}>} pronto para o ZipStore
+   */
+  static screenImagens(contents) {
+    const names = DesignCodeRenderer.imageNames(contents);
+    const arquivos = [];
+    const usados = new Set();
+    contents.forEach((node) => {
+      if (node.type !== 'image' || !DesignCodeRenderer.isDataUrl(node.src)) return;
+      if (usados.has(node.src)) return;
+      usados.add(node.src);
+      const dados = DesignCodeRenderer.dataUrlBytes(node.src);
+      if (!dados) return;
+      const path = names.get(node.src);
+      if (path) arquivos.push({ nome: path.slice(path.indexOf('/') + 1), dados });
+    });
+    return arquivos;
+  }
+
+  static htmlFor(node, index, names) {
     const cls = 'n' + index + ' ' + DesignCodeRenderer.semanticClass(node);
     // O `id` e o mesmo `nX` das classes: e a ancora de quem for escrever
     // JavaScript proprio na aba Codigo (`document.getElementById` ja o
@@ -298,9 +388,13 @@ export class DesignCodeRenderer {
       return '<div class="' + cls + '" id="' + id + '">' + esc(node.text) + '</div>';
     }
     if (node.type === 'image') {
+      // O caminho vem de `imageNames` (o mesmo mapa que alimenta o ZIP);
+      // fora dele -- `src` que ja era URL, ou chamada avulsa -- o valor
+      // viaja como esta.
+      const src = (names && names.get(node.src)) || node.src;
       // `alt` vazio e o correto: a imagem e decorativa aqui, e um `alt`
       // inventado seria lido em voz alta por um leitor de tela.
-      return '<img class="' + cls + '" id="' + id + '" src="' + esc(node.src) + '" alt="">';
+      return '<img class="' + cls + '" id="' + id + '" src="' + esc(src) + '" alt="">';
     }
     if (node.type === 'shape' && node.shapeType === 'line') {
       return '<div class="' + cls + '" id="' + id + '"><i></i></div>';
@@ -343,9 +437,10 @@ export class DesignCodeRenderer {
    * visibilidade nem de roupa da aplicacao por cima -- o arquivo baixado
    * tem de ser o desenho, e mais nada.
    */
-  static html(contents) {
+  static html(contents, names) {
+    const mapa = names || DesignCodeRenderer.imageNames(contents);
     const parts = ['<div class="screen" id="screen">'];
-    contents.forEach((node, i) => parts.push('  ' + DesignCodeRenderer.htmlFor(node, i + 1)));
+    contents.forEach((node, i) => parts.push('  ' + DesignCodeRenderer.htmlFor(node, i + 1, mapa)));
     parts.push('</div>');
     return parts.join('\n');
   }

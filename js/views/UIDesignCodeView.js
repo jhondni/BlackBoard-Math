@@ -1,4 +1,5 @@
 import { DesignCodeRenderer } from '../renderers/DesignCodeRenderer.js';
+import { ZipStore } from '../renderers/ZipStore.js';
 
 /* ============================================
    UI/UX DESIGNER - UIDesignCodeView
@@ -12,10 +13,17 @@ import { DesignCodeRenderer } from '../renderers/DesignCodeRenderer.js';
 
      1. escolher qual frame virou tela;
      2. mostrar o texto, e deixar editar;
-     3. deixar baixar o resultado: so o frame selecionado
-        e o que esta dentro dele, num HTML unico, com o
-        CSS no `<style>` e -- quando houver -- o
-        JavaScript no `<script>`.
+     3. deixar baixar o resultado: o frame selecionado num HTML unico
+        (CSS no `<style>`, JavaScript no `<script>` quando houver), ou num
+        `.zip` quando a tela tem imagem -- o HTML referencia as imagens
+        por caminho (`imagens/imagem-1.png`), e so o pacote com a pasta
+        junto abre sem imagem quebrada.
+
+   A imagem referencia caminho, nao codigo: o data URL do modelo vira
+   `imagens/...` na saida, senao o HTML seria uma parede de base64.
+   `DesignCodeRenderer.screenImagens` e quem entrega os bytes desse
+   caminho, com os MESMOS nomes, para o zip nao sair desalinhado do
+   codigo.
 
    Digitar no textarea NAO regenera o codigo. O que
    voce escreve passa a ser a fonte da verdade, e o
@@ -38,7 +46,7 @@ export class UIDesignCodeView {
     this.stale = false;
     this.active = false;
 
-    this.onDownload = null;   // (fileName, text) => void
+    this.onDownload = null;   // (fileName, blob) => void
   }
 
   init() {
@@ -93,7 +101,7 @@ export class UIDesignCodeView {
     baixar.type = 'button';
     baixar.className = 'design-code-btn is-primary';
     baixar.textContent = 'Baixar HTML';
-    baixar.title = 'Baixa so o frame selecionado num HTML unico, com o CSS dentro e o JavaScript, se houver';
+    baixar.title = 'Baixa o frame selecionado num HTML unico, com CSS e JavaScript; quando a tela tem imagem, sai um .zip com a pasta imagens junto';
     baixar.addEventListener('click', () => this._download());
     bar.appendChild(baixar);
 
@@ -245,11 +253,18 @@ export class UIDesignCodeView {
   }
 
   /**
-   * O botao de baixar entrega o frame num arquivo so, com tudo dentro: o
-   * `DesignCodeRenderer.document` monta o HTML com o CSS no `<style>` e,
-   * se houver JavaScript escrito, o `<script>` depois da tela. O texto
-   * usado e o das caixas em edicao, exatamente como estao agora -- o que
-   * esta dentro do frame selecionado, e mais nada.
+   * O botao de baixar entrega o frame selecionado.
+   *
+   * Sem imagem o arquivo continua um HTML unico, com o CSS dentro e o
+   * JavaScript, se houver -- o `DesignCodeRenderer.document` monta, e o
+   * texto usado e o das caixas em edicao, exatamente como estao agora.
+   *
+   * Com imagem o pacote e um `.zip`: o HTML referencia
+   * `imagens/imagem-1.png`, e esse caminho so abre se a pasta estiver
+   * junto do arquivo. Mandar os dois num zip e a unica forma de o
+   * navegador entregar diretorio. Os bytes vem de `screenImagens`, e nao
+   * do textarea, porque o codigo ja trocou a data URL pelo caminho -- a
+   * leitura precisa ir no modelo, que guarda o arquivo inteiro.
    */
   _download() {
     const frame = this.currentFrame();
@@ -260,6 +275,14 @@ export class UIDesignCodeView {
       css: this.fields.css.value,
       js: this.fields.js.value
     });
-    if (this.onDownload) this.onDownload(frame.name + '.html', text);
+
+    const contents = DesignCodeRenderer.contentsOf(this.design, frame);
+    const imagens = DesignCodeRenderer.screenImagens(contents);
+    if (!imagens.length) {
+      if (this.onDownload) this.onDownload(frame.name + '.html', new Blob([text], { type: 'text/html' }));
+      return;
+    }
+    const arquivos = [{ nome: 'index.html', dados: text }].concat(imagens);
+    if (this.onDownload) this.onDownload(frame.name + '.zip', ZipStore.buildZip(arquivos));
   }
 }
