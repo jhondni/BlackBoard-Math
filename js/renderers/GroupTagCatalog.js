@@ -25,6 +25,12 @@
      label  - o rotulo do `<select>` do painel
      css    - propriedades do reset (sem chaves)
      attrs  - atributos fixos do elemento (ex.: href)
+     absorbs - a pasta se monta das proprias camadas:
+              a primeira forma vira o formato (fundo,
+              borda, raio) e o primeiro texto vira o
+              rotulo (conteudo + tipografia) do elemento.
+              Vale para os controles; um `<div>`/`<nav>`
+              apenas embrulha os membros como sempre
      void   - o elemento nao aceita filhos (input);
               nesse caso o texto do membro vira
               `placeholder` em vez de virar filho
@@ -37,6 +43,7 @@ export const GROUP_TAGS = [
   {
     tag: 'button',
     label: 'button - botão',
+    absorbs: true,
     css: [
       'appearance: none',
       '-webkit-appearance: none',
@@ -52,12 +59,14 @@ export const GROUP_TAGS = [
   {
     tag: 'a',
     label: 'a - link',
+    absorbs: true,
     attrs: [['href', '#']],
     css: ['display: block', 'text-decoration: none', 'color: inherit', 'cursor: pointer']
   },
   {
     tag: 'input',
     label: 'input - campo',
+    absorbs: true,
     void: true,
     placeholderFromText: true,
     css: [
@@ -76,6 +85,7 @@ export const GROUP_TAGS = [
   {
     tag: 'label',
     label: 'label - rótulo',
+    absorbs: true,
     css: ['display: block', 'cursor: pointer']
   },
   { tag: 'form', label: 'form - formulário', css: ['margin: 0', 'padding: 0'] },

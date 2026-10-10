@@ -70,9 +70,23 @@
    o `left`/`top` sair relativo ao embrulho. O embrulho em
    si e posicionado relativo ao frame, como qualquer no.
 
+   ---- Controles que se montam das camadas ----
+
+   Nas tags de controle (`button`, `a`, `label`, `input` --
+   as que tem `absorbs` no catalogo), a pasta deixa de ser
+   um `<div>` em volta de tiras soltas: as duas camadas que
+   dao sentido a um controle viram o proprio elemento. A
+   primeira forma de retangulo ou elipse vira o FORMATO --
+   o fundo, a borda e o raio dela descem para o CSS do
+   embrulho, que passa a ter a caixa exata dessa forma. O
+   primeiro texto vira o ROTULO -- o conteudo do elemento e
+   a sua tipografia. As duas camadas absorvidas saem do
+   HTML (nao aparecem mais como filhos); o resto dos
+   membros continua la, posicionado como sempre.
+
    Elemento que nao aceita filhos (`input`) nao embrulha
-   nada: o texto do primeiro membro de texto vira o
-   `placeholder` e os outros membros ficam de fora.
+   nada: o texto absorvido vira o `placeholder`, a forma da
+   o formato, e os outros membros ficam de fora.
    ============================================ */
 
 import { findGroupTag } from './GroupTagCatalog.js';
@@ -226,6 +240,48 @@ export class DesignCodeRenderer {
     }, { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
   }
 
+  /** A caixa de um no solto, no mesmo formato do `unionBounds`. */
+  static nodeBounds(node) {
+    return {
+      left: node.x,
+      top: node.y,
+      right: node.x + node.width,
+      bottom: node.y + node.height
+    };
+  }
+
+  /* ---- Controles que se montam das camadas ----
+     Ver a secao "Controles que se montam das camadas" no cabecalho.
+     As camadas absorvidas sao escolhidas pela ordem do z (o primeiro e o
+     mais ao fundo) e so entre as visiveis: uma forma oculta nao vira
+     fundo nem um texto oculto vira rotulo. */
+
+  /** A primeira forma capaz de dar o formato: retangulo ou elipse. */
+  static formatShapeOf(members) {
+    return members.find((node) => node.visible !== false
+      && node.type === 'shape'
+      && (node.shapeType === 'rect' || node.shapeType === 'ellipse')) || null;
+  }
+
+  /** O primeiro texto com conteudo, para virar o rotulo. */
+  static labelTextOf(members) {
+    return members.find((node) => node.visible !== false
+      && node.type === 'text' && node.text) || null;
+  }
+
+  /**
+   * Separa os membros de uma pasta com tag em: a forma que da o formato,
+   * o texto que vira o rotulo e o resto (que segue como filho). Fora das
+   * tags que absorvem, nada e retirado -- a pasta so embrulha.
+   */
+  static composeOf(members, meta) {
+    if (!meta || !meta.absorbs) return { shape: null, text: null, children: members };
+    const shape = DesignCodeRenderer.formatShapeOf(members);
+    const text = DesignCodeRenderer.labelTextOf(members);
+    const children = members.filter((node) => node !== shape && node !== text);
+    return { shape, text, children };
+  }
+
   /**
    * A "planta" da tela: os `steps` ja na ordem final do DOM, com o
    * numero (`nX`) que o HTML e o CSS vao usar de casamento. O embrulho
@@ -234,6 +290,11 @@ export class DesignCodeRenderer {
    * Cada membro de um embrulho troca a origem: o `left`/`top` dele e
    * relativo a bbox da pasta (`member.origin`), e nao mais ao canto do
    * frame -- e o embrulho, esse sim, cai nas coordenadas do frame.
+   *
+   * Numa tag de controle (`absorbs`), a forma vira o formato do
+   * embrulho e o texto vira o rotulo: os dois saem da lista de membros
+   * (nao tem regra `.nX` propria) e o embrulho fica com a caixa da
+   * forma. Nos elementos vazios (`input`) nada sobra como filho.
    */
   static plan(design, frame) {
     const contents = DesignCodeRenderer.contentsOf(design, frame);
@@ -244,11 +305,25 @@ export class DesignCodeRenderer {
 
     items.forEach((item) => {
       if (item.kind === 'group') {
+        const meta = findGroupTag(item.group.tag);
         const index = ++seq.n;
-        const box = DesignCodeRenderer.unionBounds(item.members);
+        const composed = DesignCodeRenderer.composeOf(item.members, meta);
+        const box = composed.shape
+          ? DesignCodeRenderer.nodeBounds(composed.shape)
+          : DesignCodeRenderer.unionBounds(item.members);
         const memberOrigin = { x: box.left, y: box.top };
-        const members = item.members.map((node) => ({ node, index: ++seq.n, origin: memberOrigin }));
-        steps.push({ kind: 'group', group: item.group, index, box, origin, members });
+        const kept = meta && meta.void ? [] : composed.children;
+        const members = kept.map((node) => ({ node, index: ++seq.n, origin: memberOrigin }));
+        steps.push({
+          kind: 'group',
+          group: item.group,
+          index,
+          box,
+          origin,
+          shape: composed.shape,
+          text: composed.text,
+          members
+        });
       } else {
         steps.push({ kind: 'node', node: item.node, index: ++seq.n, origin });
       }
@@ -419,9 +494,13 @@ export class DesignCodeRenderer {
 
   /**
    * A regra do embrulho da pasta: uma caixa absoluta na bbox dos
-   * membros, mais o reset da tag (`GroupTagCatalog`). O reset vem
-   * DEPOIS da caixa de proposito -- um `appearance`/`border`/`padding`
-   * da tag ideal tem de poder vencer o que a caixa ja pos.
+   * membros -- ou na caixa exata da forma absorvida, quando ha uma --,
+   * mais o reset da tag (`GroupTagCatalog`).
+   *
+   * A ordem importa: o reset vem primeiro, e o formato (a forma) e o
+   * rotulo (o texto) vem depois, para poderem vencer o que o reset
+   * zerou. Um `appearance`/`border`/`padding` da tag ideal nao apaga o
+   * fundo que o desenho pediu.
    */
   static cssForGroup(entry) {
     const meta = findGroupTag(entry.group.tag);
@@ -433,8 +512,60 @@ export class DesignCodeRenderer {
       'width: ' + px(entry.box.right - entry.box.left),
       'height: ' + px(entry.box.bottom - entry.box.top)
     ];
+
+    // A caixa e a forma absorvida giram junto, como qualquer no.
+    if (entry.shape && entry.shape.rotation) {
+      box.push('transform: rotate(' + px(entry.shape.rotation) + ')');
+    }
+
     (meta.css || []).forEach((prop) => box.push(prop));
+    if (entry.shape) DesignCodeRenderer.shapeFormat(entry.shape).forEach((prop) => box.push(prop));
+    if (entry.text && !meta.void) DesignCodeRenderer.textFormat(entry.text).forEach((prop) => box.push(prop));
+
     return '.n' + entry.index + ' {\n  ' + box.join(';\n  ') + ';\n}';
+  }
+
+  /**
+   * O formato: o visual da forma vira o do embrulho -- fundo, borda e
+   * raio. A elipse sai como `border-radius: 50%`, igual ao `cssFor`.
+   */
+  static shapeFormat(node) {
+    const props = [];
+    props.push(node.shapeType === 'ellipse'
+      ? 'border-radius: 50%'
+      : 'border-radius: ' + DesignCodeRenderer.radiusOf(node));
+    props.push('background: ' + node.fill);
+    if (node.stroke !== 'none') {
+      props.push('border: ' + px(node.strokeWidth) + ' solid ' + node.stroke);
+    }
+    props.push('box-sizing: border-box');
+    return props;
+  }
+
+  /**
+   * O rotulo: a tipografia do texto vira a do embrulho, que passa a
+   * centrar o conteudo como um controle -- o `align` do texto decide o
+   * eixo horizontal pelo `justify-content`.
+   */
+  static textFormat(node) {
+    return [
+      'display: flex',
+      'align-items: center',
+      'justify-content: ' + DesignCodeRenderer.justifyOf(node.align),
+      'font-family: ' + node.fontFamily,
+      'font-size: ' + px(node.fontSize),
+      'font-weight: ' + node.fontWeight,
+      'color: ' + node.color,
+      'text-align: ' + node.align,
+      'line-height: ' + node.lineHeight
+    ];
+  }
+
+  /** O `text-align` do modelo no eixo horizontal do flex. */
+  static justifyOf(align) {
+    if (align === 'right') return 'flex-end';
+    if (align === 'center') return 'center';
+    return 'flex-start';
   }
 
   /* ---- HTML ---- */
@@ -588,12 +719,11 @@ export class DesignCodeRenderer {
   }
 
   /**
-   * O embrulho de uma pasta com tag. Elemento que aceita filhos sai com
-   * os membros dentro, cada um indentado um nivel. Elemento vazio
-   * (`input`) nao tem onde por filho: o texto do primeiro membro de
-   * texto vira `placeholder` e o resto dos membros nao entra no HTML --
-   * e a unica leitura possivel de um `<input>` desenhado com um texto
-   * dentro dele.
+   * O embrulho de uma pasta com tag. Numa tag de controle, o texto
+   * absorvido vira o conteudo do elemento (o rotulo) e os membros que
+   * sobraram entram depois, indentados. Elemento vazio (`input`) nao
+   * tem onde por filho: o texto vira `placeholder` e o resto dos
+   * membros nao entra no HTML.
    */
   static groupHtml(entry, names) {
     const meta = findGroupTag(entry.group.tag);
@@ -602,19 +732,22 @@ export class DesignCodeRenderer {
 
     if (meta.void) {
       let placeholder = '';
-      if (meta.placeholderFromText) {
-        const text = entry.members.map((m) => m.node).find((node) => node.type === 'text' && node.text);
-        if (text) placeholder = ' placeholder="' + esc(text.text) + '"';
+      if (meta.placeholderFromText && entry.text) {
+        placeholder = ' placeholder="' + esc(entry.text.text) + '"';
       }
       return '<input class="' + cls + '" id="' + id + '"' + placeholder + '>';
     }
 
     const attrs = (meta.attrs || []).map((pair) => ' ' + pair[0] + '="' + esc(pair[1]) + '"').join('');
-    const inner = entry.members
-      .map((m) => '  ' + DesignCodeRenderer.htmlFor(m.node, m.index, names))
-      .join('\n');
-    return '<' + meta.tag + ' class="' + cls + '" id="' + id + '"' + attrs + '>\n'
-      + inner + '\n</' + meta.tag + '>';
+    const label = entry.text ? esc(entry.text.text) : '';
+    const open = '<' + meta.tag + ' class="' + cls + '" id="' + id + '"' + attrs + '>';
+
+    // Rotulo sozinho sai na mesma linha: sem filhos nao ha o que indentar.
+    if (!entry.members.length) return open + label + '</' + meta.tag + '>';
+
+    const lines = entry.members.map((m) => '  ' + DesignCodeRenderer.htmlFor(m.node, m.index, names));
+    if (label) lines.unshift('  ' + label);
+    return open + '\n' + lines.join('\n') + '\n</' + meta.tag + '>';
   }
 
   /**

@@ -228,8 +228,15 @@ objeto, sem caso especial.
   sublinhado, o `<input>` sem borda/outline…). Não é uma hierarquia de desenho:
   o canvas e o restante da árvore seguem chapados. Só valem as tags do preset
   (`GroupTagCatalog`); uma tag desconhecida num arquivo editado à mão é ignorada.
-  Em elemento que não aceita filhos (`input`), o texto do primeiro membro de
-  texto vira `placeholder` e os demais membros ficam de fora do HTML.
+- **Controles que se montam das camadas** — nas tags de controle (`button`,
+  `a`, `label`, `input`), a pasta não vira um `<div>` em volta de tiras soltas:
+  as camadas viram o próprio elemento. A primeira forma de retângulo ou elipse
+  dá o **formato** (fundo, borda e raio dela passam para o elemento, que fica
+  com a caixa exata da forma) e o primeiro texto vira o **rótulo** (o conteúdo
+  do elemento e a sua tipografia, centrado). As duas camadas absorvidas saem do
+  HTML; o resto dos membros continua como filho, posicionado como sempre. Em
+  elemento que não aceita filhos (`input`), o texto absorvido vira `placeholder`
+  e os demais membros ficam de fora.
 
 ### Atalhos de teclado
 | Tecla | Ação |
