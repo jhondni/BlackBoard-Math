@@ -274,9 +274,3 @@ python -m http.server     # ou npx serve
 # abrir http://localhost:8000
 ```
 
-### Empacotar (Windows)
-
-```bash
-npm run build   # electron-builder --win → dist/ (Setup + Portable)
-```
-
