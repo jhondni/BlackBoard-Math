@@ -6,8 +6,6 @@ sem build), também empacotada como app desktop com **Electron**.
 
 <p align="center">
   <img alt="Versão" src="https://img.shields.io/badge/versão-1.0.0-blue">
-  <img alt="Licença" src="https://img.shields.io/badge/licença-MIT-green">
-  <img alt="Plataforma" src="https://img.shields.io/badge/plataforma-Windows%20%7C%20Web-lightgrey">
 </p>
 
 ## Índice
