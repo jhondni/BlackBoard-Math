@@ -106,6 +106,25 @@ if (!gotLock) {
 
     mainWindow.maximize();
 
+    // Downloads: pergunta onde salvar em vez de salvar em silencio.
+    mainWindow.webContents.session.on('will-download', (event, item) => {
+      const win = BrowserWindow.fromWebContents(item.getWebContents());
+      dialog.showSaveDialog(win, {
+        title: 'Salvar arquivo',
+        defaultPath: path.join(app.getPath('downloads'), item.getFilename())
+      }).then((result) => {
+        if (result.canceled || !result.filePath) {
+          event.preventDefault();
+          item.cancel();
+        } else {
+          item.setSavePath(result.filePath);
+        }
+      }).catch(() => {
+        event.preventDefault();
+        item.cancel();
+      });
+    });
+
     mainWindow.webContents.on('will-navigate', (event, url) => {
       if (!url.startsWith('http://127.0.0.1:')) {
         event.preventDefault();
