@@ -72,6 +72,36 @@ export class TextRenderer {
   }
 
   /**
+   * Metricas verticais da fonte no corpo dado: ascent e descent, em px,
+   * medidos no mesmo canvas do `wrapToWidth`. E o que permite o CSS do
+   * export casar a baseline da primeira linha com a do SVG -- o
+   * `line-height` do CSS sozinho so depende de um multiplicador, e a
+   * baseline real fica na meia-entrelinha mais o ascent da fonte.
+   *
+   * Sem DOM, ou em navegador sem `fontBoundingBox`, cai na proporcao
+   * tipica 0.8/0.2: nao e a metrica exata, mas mantem o desenho no lugar
+   * em vez de saltar.
+   *
+   * @param {string} font - Fonte no formato do canvas (`700 16px Inter`)
+   * @param {number} fontSize - Corpo, para a proporcao de reserva
+   * @returns {{ ascent: number, descent: number }}
+   */
+  static metrics(font, fontSize) {
+    const size = Number(fontSize) || 0;
+    const fallback = { ascent: size * 0.8, descent: size * 0.2 };
+    const ctx = measureContext();
+    if (!ctx) return fallback;
+    ctx.font = font;
+    const m = ctx.measureText('Hg');
+    const ascent = m.fontBoundingBoxAscent;
+    const descent = m.fontBoundingBoxDescent;
+    if (Number.isFinite(ascent) && Number.isFinite(descent) && ascent > 0) {
+      return { ascent, descent };
+    }
+    return fallback;
+  }
+
+  /**
    * Quebra um texto em linhas que cabem na largura dada, medindo com a
    * fonte informada. Parte por `\n`, depois por espaco, e palavra mais
    * larga que a caixa e partida caractere a caractere -- o SVG nao tem

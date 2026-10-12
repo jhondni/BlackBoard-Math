@@ -90,6 +90,19 @@
    ============================================ */
 
 import { findGroupTag } from './GroupTagCatalog.js';
+import { TextRenderer } from './TextRenderer.js';
+
+/**
+ * Familias que o desenho usa e que o navegador do arquivo baixado NAO tem
+ * de fabrica. Sao estas que viram `<link>` do Google Fonts no `document`;
+ * as demais (system-ui, Georgia...) seguem como estao, porque ja existem
+ * na maquina de quem abre. A chave e a familia normalizada (minuscula, sem
+ * aspas) e o valor e o nome que o Google Fonts entende.
+ */
+const WEB_FONTS = {
+  inter: 'Inter',
+  'jetbrains mono': 'JetBrains Mono'
+};
 
 /** Escapa texto que vai para dentro de um atributo ou entre tags. */
 function esc(value) {
@@ -413,6 +426,10 @@ export class DesignCodeRenderer {
       box.push('color: ' + node.color);
       box.push('text-align: ' + node.align);
       box.push('line-height: ' + node.lineHeight);
+      // Alinha a primeira linha a baseline do SVG: o `line-height` sozinho
+      // poria a baseline em meia-entrelinha + ascent, que nao bate.
+      const shift = DesignCodeRenderer.textShift(node);
+      if (shift) box.push('margin-top: ' + cqw(shift, fw));
       // `pre` para os `\n` digitados virarem quebra de linha como no SVG;
       // `break-word` para a palavra mais larga que a caixa tambem quebrar.
       box.push('white-space: pre-wrap');
@@ -445,6 +462,34 @@ export class DesignCodeRenderer {
   /** Angulo sem `px`: o arredondamento do texto do codigo, em graus. */
   static degrees(angle) {
     return Math.round(Number(angle) * 100) / 100;
+  }
+
+  /** A fonte do no no mesmo formato que o canvas de medicao do `TextRenderer`. */
+  static fontString(node) {
+    return `${node.fontWeight} ${node.fontSize}px ${node.fontFamily}`;
+  }
+
+  /**
+   * Quanto deslocar a caixa do texto para a baseline da primeira linha
+   * cair em `fontSize` abaixo do topo, que e o que o SVG faz
+   * (`y = node.y + fontSize`, em `UIDesignView._buildText`).
+   *
+   * No CSS a baseline da primeira linha fica em `meia-entrelinha + ascent`
+   * abaixo do topo, e a meia-entrelinha sai das metricas reais da fonte --
+   * por isso a medida no canvas. O deslocamento vai em `margin-top` (que
+   * aceita valor negativo; `padding`, que nao aceita, mudaria o conteudo).
+   * Entre linhas nada muda: o `line-height` ja da o mesmo passo do `dy`
+   * do SVG (`fontSize * lineHeight`).
+   */
+  static textShift(node) {
+    const size = Number(node.fontSize) || 0;
+    if (!size) return 0;
+    const lineHeight = Number(node.lineHeight) || 1.4;
+    const { ascent, descent } = TextRenderer.metrics(DesignCodeRenderer.fontString(node), size);
+    const lineBox = lineHeight * size;
+    const half = (lineBox - (ascent + descent)) / 2;
+    const shift = size - (half + ascent);
+    return Number.isFinite(shift) ? Math.round(shift * 10000) / 10000 : 0;
   }
 
   /** O `fit` da imagem e o `object-fit` do CSS, com os mesmos nomes. */
@@ -555,6 +600,7 @@ export class DesignCodeRenderer {
     (meta.css || []).forEach((prop) => box.push(prop));
     if (entry.shape) DesignCodeRenderer.shapeFormat(entry.shape, frame).forEach((prop) => box.push(prop));
     if (entry.text && !meta.void) DesignCodeRenderer.textFormat(entry.text, frame).forEach((prop) => box.push(prop));
+    if (entry.text && meta.void) DesignCodeRenderer.fieldFormat(entry.text, frame).forEach((prop) => box.push(prop));
 
     return '.n' + entry.index + ' {\n  ' + box.join(';\n  ') + ';\n}';
   }
@@ -602,6 +648,23 @@ export class DesignCodeRenderer {
     if (align === 'right') return 'flex-end';
     if (align === 'center') return 'center';
     return 'flex-start';
+  }
+
+  /**
+   * A tipografia de um controle vazio (`input`): sem `display: flex`, que
+   * quebraria um elemento substituido. So o que o placeholder herda --
+   * familia, corpo, peso e cor -- e o alinhamento do texto. Sem isto o
+   * campo caia no 16px do navegador, com a fonte errada.
+   */
+  static fieldFormat(node, frame) {
+    const fw = Number(frame.width) || 1;
+    return [
+      'font-family: ' + node.fontFamily,
+      'font-size: ' + cqw(node.fontSize, fw),
+      'font-weight: ' + node.fontWeight,
+      'color: ' + node.color,
+      'text-align: ' + node.align
+    ];
   }
 
   /* ---- HTML ---- */
@@ -852,19 +915,62 @@ export class DesignCodeRenderer {
       '<head>',
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      '<title>' + esc(screen.title) + '</title>',
-      '<style>',
-      screen.css,
-      '</style>',
-      '</head>',
-      '<body>',
-      screen.html
+      '<title>' + esc(screen.title) + '</title>'
     ];
+    // As fontes web (Inter, JetBrains Mono) NAO existem na maquina de quem
+    // abre o arquivo: sem estes `<link>` o texto cairia no system-ui. Sai
+    // so o que o CSS realmente usa, entao um desenho so de fontes do
+    // sistema nao carrega nada de fora.
+    DesignCodeRenderer.fontLinks(screen.css).forEach((line) => parts.push(line));
+    parts.push('<style>', screen.css, '</style>', '</head>', '<body>', screen.html);
     // Sem JavaScript escrito nao ha porque emitir um `<script>` vazio:
     // ele so acrescentaria uma linha em branco ao arquivo.
     if (js) parts.push('<script>', screen.js, '</script>');
     parts.push('</body>', '</html>', '');
     return parts.join('\n');
+  }
+
+  /**
+   * As familias web usadas no CSS, com os pesos de cada uma. A varredura e
+   * por bloco de regra (`{...}`) e o nome da familia e o primeiro da lista,
+   * que e o que importa -- o resto do `font-family` sao fallbacks que o
+   * Google Fonts nao fornece. So entram as familias de `WEB_FONTS`.
+   *
+   * @param {string} css - o CSS gerado (ou editado) da tela
+   * @returns {Map<string, Set<string>>} familia -> pesos usados
+   */
+  static webFonts(css) {
+    const used = new Map();
+    (String(css || '').match(/\{[^{}]*\}/g) || []).forEach((block) => {
+      const family = /font-family\s*:\s*([^;]+)/i.exec(block);
+      if (!family) return;
+      const name = family[1].split(',')[0].replace(/['"]/g, '').trim().toLowerCase();
+      const web = WEB_FONTS[name];
+      if (!web) return;
+      const weight = (/font-weight\s*:\s*([0-9]+)/i.exec(block) || [])[1] || '400';
+      if (!used.has(web)) used.set(web, new Set());
+      used.get(web).add(weight);
+    });
+    return used;
+  }
+
+  /**
+   * O `<link>` do Google Fonts para as familias web usadas, ou `[]` quando
+   * o desenho nao usa nenhuma. As duas primeiras linhas so abrem a conexao
+   * antes do pedido do CSS, o que evita o texto nascer na fonte errada.
+   */
+  static fontLinks(css) {
+    const used = DesignCodeRenderer.webFonts(css);
+    if (!used.size) return [];
+    const families = [...used.entries()].map(([name, weights]) =>
+      'family=' + name.replace(/ /g, '+') + ':wght@' + [...weights].sort().join(';')
+    );
+    const href = 'https://fonts.googleapis.com/css2?' + families.join('&') + '&display=swap';
+    return [
+      '<link rel="preconnect" href="https://fonts.googleapis.com">',
+      '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+      '<link rel="stylesheet" href="' + esc(href) + '">'
+    ];
   }
 
   /** Caminho curto: frame -> conteudo -> tela. */
