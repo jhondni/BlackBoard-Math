@@ -100,10 +100,22 @@ function esc(value) {
     .replace(/"/g, '&quot;');
 }
 
-/** `12.5` vira `12.5px`; arredonda para o codigo nao ficar cheio de ruido. */
-function px(value) {
-  const n = Math.round(Number(value) * 100) / 100;
-  return n + 'px';
+/**
+ * Uma medida do design vira fracao da largura da tela: `cqw` e 1% da
+ * largura do `.screen` (container query). Assim o codigo gerado escala
+ * junto com a tela em vez de nascer com um tamanho fixo em px.
+ */
+function cqw(value, totalWidth) {
+  const total = Number(totalWidth) || 1;
+  const n = Math.round((Number(value) / total) * 100 * 10000) / 10000;
+  return n + 'cqw';
+}
+
+/** Igual ao `cqw`, mas na altura: `cqh` e 1% da altura do `.screen`. */
+function cqh(value, totalHeight) {
+  const total = Number(totalHeight) || 1;
+  const n = Math.round((Number(value) / total) * 100 * 10000) / 10000;
+  return n + 'cqh';
 }
 
 /** Recua cada linha de um trecho -- o codigo gerado fica legivel. */
@@ -346,20 +358,22 @@ export class DesignCodeRenderer {
    * lugar para a origem do `.screen`, senao o codigo sairia deslocado
    * quando o frame nao esta em (0,0).
    */
-  static cssFor(node, index, origin) {
+  static cssFor(node, index, origin, frame) {
     const o = origin || {};
+    const fw = Number(frame.width) || 1;
+    const fh = Number(frame.height) || 1;
     const sel = '.n' + index;
     const box = [
       'position: absolute',
-      'left: ' + px(node.x - (o.x || 0)),
-      'top: ' + px(node.y - (o.y || 0)),
-      'width: ' + px(node.width),
-      'height: ' + px(node.height)
+      'left: ' + cqw(node.x - (o.x || 0), fw),
+      'top: ' + cqh(node.y - (o.y || 0), fh),
+      'width: ' + cqw(node.width, fw),
+      'height: ' + cqh(node.height, fh)
     ];
 
     // O SVG gira o grupo em torno do centro do no, e o CSS faz o mesmo
     // sem dizer de onde: o centro e o padrao.
-    if (node.rotation) box.push('transform: rotate(' + px(node.rotation) + ')');
+    if (node.rotation) box.push('transform: rotate(' + DesignCodeRenderer.degrees(node.rotation) + 'deg)');
 
     if (node.type === 'frame') {
       box.push('background: ' + node.background);
@@ -382,19 +396,19 @@ export class DesignCodeRenderer {
       } else {
         // Os quatro cantos sao a mesma ordem do CSS, o que faz o
         // `radii` do modelo virar uma regra e nao quatro.
-        box.push('border-radius: ' + DesignCodeRenderer.radiusOf(node));
+        box.push('border-radius: ' + DesignCodeRenderer.radiusOf(node, fw));
         box.push('background: ' + node.fill);
       }
 
       if (node.shapeType !== 'line' && node.shapeType !== 'polygon' && node.stroke !== 'none') {
-        box.push('border: ' + px(node.strokeWidth) + ' solid ' + node.stroke);
+        box.push('border: ' + cqw(node.strokeWidth, fw) + ' solid ' + node.stroke);
         box.push('box-sizing: border-box');
       }
     }
 
     if (node.type === 'text') {
       box.push('font-family: ' + node.fontFamily);
-      box.push('font-size: ' + px(node.fontSize));
+      box.push('font-size: ' + cqw(node.fontSize, fw));
       box.push('font-weight: ' + node.fontWeight);
       box.push('color: ' + node.color);
       box.push('text-align: ' + node.align);
@@ -421,11 +435,16 @@ export class DesignCodeRenderer {
     return sel + ' {\n  ' + box.join(';\n  ') + ';\n}';
   }
 
-  static radiusOf(node) {
+  static radiusOf(node, totalWidth) {
     const radii = Array.isArray(node.radii) ? node.radii : [0, 0, 0, 0];
     // A ordem do CSS e a mesma do SVG: superior esquerdo, superior
     // direito, inferior direito, inferior esquerdo.
-    return radii.map(px).join(' ');
+    return radii.map((r) => cqw(r, totalWidth)).join(' ');
+  }
+
+  /** Angulo sem `px`: o arredondamento do texto do codigo, em graus. */
+  static degrees(angle) {
+    return Math.round(Number(angle) * 100) / 100;
   }
 
   /** O `fit` da imagem e o `object-fit` do CSS, com os mesmos nomes. */
@@ -436,7 +455,8 @@ export class DesignCodeRenderer {
   }
 
   /** O tracado da linha: caixa vazia do tamanho do no + um `<i>` na diagonal. */
-  static lineCss(node, index) {
+  static lineCss(node, index, frame) {
+    const fw = Number(frame.width) || 1;
     const length = Math.hypot(node.width, node.height);
     const angle = Math.atan2(node.height, node.width) * 180 / Math.PI;
     const stroke = node.stroke === 'none' ? node.fill : node.stroke;
@@ -446,19 +466,21 @@ export class DesignCodeRenderer {
       '  position: absolute;',
       '  left: 50%;',
       '  top: 50%;',
-      '  width: ' + px(length) + ';',
-      '  height: ' + px(w) + ';',
-      '  margin-top: ' + px(-w / 2) + ';',
+      '  width: ' + cqw(length, fw) + ';',
+      '  height: ' + cqw(w, fw) + ';',
+      '  margin-top: ' + cqw(-w / 2, fw) + ';',
       // `translate(-50%)` em X recentra o comprimento pela metade; o
       // `rotate` gira em torno do centro, como o `<line>` do SVG.
       '  transform: translateX(-50%) rotate(' + (Math.round(angle * 100) / 100) + 'deg);',
       '  background: ' + stroke + ';',
-      '  border-radius: ' + px(w / 2) + ';',
+      '  border-radius: ' + cqw(w / 2, fw) + ';',
       '}'
     ].join('\n');
   }
 
   static baseCss(frame) {
+    const fw = Number(frame.width) || 1;
+    const fh = Number(frame.height) || 1;
     // O `.screen` e o proprio frame: o fundo dele (o `background` do
     // model) tem de vir aqui, porque o frame em questao nao entra em
     // `contentsOf` -- ele e a tela, nao um elemento dentro dela.
@@ -470,14 +492,24 @@ export class DesignCodeRenderer {
     // cruza a borda. O `clipContent` do model nao e consultado aqui:
     // desligado, ele deixaria vazar para fora justamente o que o
     // arquivo promete nao conter.
+    //
+    // A escala e relativa: o `.screen` mantem a proporcao do frame e
+    // cabe na janela (letterbox), e os filhos medem em `cqw`/`cqh` --
+    // 1% da tela -- em vez de px, entao o desenho acompanha qualquer
+    // tamanho de tela sem trocar de layout.
+    const ratio = Math.round((fw / fh) * 100000) / 100000;
     return [
       'body {',
       '  margin: 0;',
+      '  min-height: 100vh;',
+      '  display: grid;',
+      '  place-items: center;',
       '}',
       '.screen {',
+      '  container-type: size;',
       '  position: relative;',
-      '  width: ' + px(frame.width) + ';',
-      '  height: ' + px(frame.height) + ';',
+      '  width: min(100vw, calc(100vh * ' + ratio + '));',
+      '  aspect-ratio: ' + fw + ' / ' + fh + ';',
       '  background: ' + frame.background + ';',
       '  overflow: hidden;',
       '}'
@@ -485,10 +517,10 @@ export class DesignCodeRenderer {
   }
 
   /** A regra de um no solto: o `cssFor` e, na linha, o `<i>` do tracejado. */
-  static cssForNode(node, index, origin) {
-    const base = DesignCodeRenderer.cssFor(node, index, origin);
+  static cssForNode(node, index, origin, frame) {
+    const base = DesignCodeRenderer.cssFor(node, index, origin, frame);
     return node.type === 'shape' && node.shapeType === 'line'
-      ? base + '\n' + DesignCodeRenderer.lineCss(node, index)
+      ? base + '\n' + DesignCodeRenderer.lineCss(node, index, frame)
       : base;
   }
 
@@ -502,25 +534,27 @@ export class DesignCodeRenderer {
    * zerou. Um `appearance`/`border`/`padding` da tag ideal nao apaga o
    * fundo que o desenho pediu.
    */
-  static cssForGroup(entry) {
+  static cssForGroup(entry, frame) {
     const meta = findGroupTag(entry.group.tag);
     const o = entry.origin || {};
+    const fw = Number(frame.width) || 1;
+    const fh = Number(frame.height) || 1;
     const box = [
       'position: absolute',
-      'left: ' + px(entry.box.left - (o.x || 0)),
-      'top: ' + px(entry.box.top - (o.y || 0)),
-      'width: ' + px(entry.box.right - entry.box.left),
-      'height: ' + px(entry.box.bottom - entry.box.top)
+      'left: ' + cqw(entry.box.left - (o.x || 0), fw),
+      'top: ' + cqh(entry.box.top - (o.y || 0), fh),
+      'width: ' + cqw(entry.box.right - entry.box.left, fw),
+      'height: ' + cqh(entry.box.bottom - entry.box.top, fh)
     ];
 
     // A caixa e a forma absorvida giram junto, como qualquer no.
     if (entry.shape && entry.shape.rotation) {
-      box.push('transform: rotate(' + px(entry.shape.rotation) + ')');
+      box.push('transform: rotate(' + DesignCodeRenderer.degrees(entry.shape.rotation) + 'deg)');
     }
 
     (meta.css || []).forEach((prop) => box.push(prop));
-    if (entry.shape) DesignCodeRenderer.shapeFormat(entry.shape).forEach((prop) => box.push(prop));
-    if (entry.text && !meta.void) DesignCodeRenderer.textFormat(entry.text).forEach((prop) => box.push(prop));
+    if (entry.shape) DesignCodeRenderer.shapeFormat(entry.shape, frame).forEach((prop) => box.push(prop));
+    if (entry.text && !meta.void) DesignCodeRenderer.textFormat(entry.text, frame).forEach((prop) => box.push(prop));
 
     return '.n' + entry.index + ' {\n  ' + box.join(';\n  ') + ';\n}';
   }
@@ -529,14 +563,15 @@ export class DesignCodeRenderer {
    * O formato: o visual da forma vira o do embrulho -- fundo, borda e
    * raio. A elipse sai como `border-radius: 50%`, igual ao `cssFor`.
    */
-  static shapeFormat(node) {
+  static shapeFormat(node, frame) {
+    const fw = Number(frame.width) || 1;
     const props = [];
     props.push(node.shapeType === 'ellipse'
       ? 'border-radius: 50%'
-      : 'border-radius: ' + DesignCodeRenderer.radiusOf(node));
+      : 'border-radius: ' + DesignCodeRenderer.radiusOf(node, fw));
     props.push('background: ' + node.fill);
     if (node.stroke !== 'none') {
-      props.push('border: ' + px(node.strokeWidth) + ' solid ' + node.stroke);
+      props.push('border: ' + cqw(node.strokeWidth, fw) + ' solid ' + node.stroke);
     }
     props.push('box-sizing: border-box');
     return props;
@@ -547,13 +582,14 @@ export class DesignCodeRenderer {
    * centrar o conteudo como um controle -- o `align` do texto decide o
    * eixo horizontal pelo `justify-content`.
    */
-  static textFormat(node) {
+  static textFormat(node, frame) {
+    const fw = Number(frame.width) || 1;
     return [
       'display: flex',
       'align-items: center',
       'justify-content: ' + DesignCodeRenderer.justifyOf(node.align),
       'font-family: ' + node.fontFamily,
-      'font-size: ' + px(node.fontSize),
+      'font-size: ' + cqw(node.fontSize, fw),
       'font-weight: ' + node.fontWeight,
       'color: ' + node.color,
       'text-align: ' + node.align,
@@ -788,10 +824,10 @@ export class DesignCodeRenderer {
     const rules = [];
     plan.steps.forEach((step) => {
       if (step.kind === 'group') {
-        rules.push(DesignCodeRenderer.cssForGroup(step));
-        step.members.forEach((m) => rules.push(DesignCodeRenderer.cssForNode(m.node, m.index, m.origin)));
+        rules.push(DesignCodeRenderer.cssForGroup(step, frame));
+        step.members.forEach((m) => rules.push(DesignCodeRenderer.cssForNode(m.node, m.index, m.origin, frame)));
       } else {
-        rules.push(DesignCodeRenderer.cssForNode(step.node, step.index, step.origin));
+        rules.push(DesignCodeRenderer.cssForNode(step.node, step.index, step.origin, frame));
       }
     });
 
