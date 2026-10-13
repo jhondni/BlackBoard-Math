@@ -523,7 +523,7 @@ export class DesignCodeRenderer {
     ].join('\n');
   }
 
-  static baseCss(frame) {
+static baseCss(frame) {
     const fw = Number(frame.width) || 1;
     const fh = Number(frame.height) || 1;
     // O `.screen` e o proprio frame: o fundo dele (o `background` do
@@ -539,20 +539,22 @@ export class DesignCodeRenderer {
     // arquivo promete nao conter.
     //
     // O `.screen` preenche 100% da viewport sem margens quando cabe na
-    // tela; quando o frame e maior, o `body` faz o scroll e o `.screen`
-    // cresce para alem da viewport, mantendo a proporcao e centralizado.
-    // Os filhos medem em `cqw`/`cqh` (1% da tela), que escalam junto.
+    // tela; quando o frame e maior, o body rola verticalmente e o
+    // `.screen` cresce na altura, mas nunca na largura -- `overflow-x:
+    // hidden` no body impede scroll lateral. Os filhos medem em
+    // `cqw`/`cqh` (1% da tela), que escalam junto.
     return [
       'body {',
       '  margin: 0;',
       '  width: 100%;',
       '  height: 100%;',
-      '  overflow: auto;',
+      '  overflow-x: hidden;',
+      '  overflow-y: auto;',
       '}',
       '.screen {',
       '  container-type: size;',
       '  position: relative;',
-      '  min-width: 100vw;',
+      '  width: 100%;',
       '  min-height: 100vh;',
       '  aspect-ratio: ' + fw + ' / ' + fh + ';',
       '  background: ' + frame.background + ';',
