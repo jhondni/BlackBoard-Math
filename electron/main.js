@@ -107,12 +107,20 @@ if (!gotLock) {
     mainWindow.maximize();
 
     // Downloads: pergunta onde salvar em vez de salvar em silencio.
+    const handledDownloads = new Set();
     mainWindow.webContents.session.on('will-download', (event, item) => {
-      const win = BrowserWindow.fromWebContents(item.getWebContents());
-      dialog.showSaveDialog(win, {
+      // blob: URLs já são tratados pelo web app (link.click()), não abrir diálogo duplo
+      if (item.getURL().startsWith('blob:')) return;
+
+      // Evita abrir diálogo duplicado se o evento disparar mais de uma vez
+      if (handledDownloads.has(item)) return;
+      handledDownloads.add(item);
+
+      dialog.showSaveDialog(mainWindow, {
         title: 'Salvar arquivo',
         defaultPath: path.join(app.getPath('downloads'), item.getFilename())
       }).then((result) => {
+        handledDownloads.delete(item);
         if (result.canceled || !result.filePath) {
           event.preventDefault();
           item.cancel();
@@ -120,6 +128,7 @@ if (!gotLock) {
           item.setSavePath(result.filePath);
         }
       }).catch(() => {
+        handledDownloads.delete(item);
         event.preventDefault();
         item.cancel();
       });
