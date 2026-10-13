@@ -532,28 +532,28 @@ export class DesignCodeRenderer {
     //
     // A pagina e o frame, e mais nada: sem padding, sem cor de fundo e
     // sem sombra de artboard, que sao moldura da aplicacao e nao do que
-    // foi desenhado. `overflow: hidden` e o que cumpre a promessa do
-    // arquivo -- so o que esta dentro do frame -- recortando o no que
-    // cruza a borda. O `clipContent` do model nao e consultado aqui:
-    // desligado, ele deixaria vazar para fora justamente o que o
+    // foi desenhado. `overflow: hidden` no `.screen` e o que cumpre a
+    // promessa do arquivo -- so o que esta dentro do frame -- recortando
+    // o no que cruza a borda. O `clipContent` do model nao e consultado
+    // aqui: desligado, ele deixaria vazar para fora justamente o que o
     // arquivo promete nao conter.
     //
-    // A escala e relativa: o `.screen` mantem a proporcao do frame e
-    // cabe na janela (letterbox), e os filhos medem em `cqw`/`cqh` --
-    // 1% da tela -- em vez de px, entao o desenho acompanha qualquer
-    // tamanho de tela sem trocar de layout.
-    const ratio = Math.round((fw / fh) * 100000) / 100000;
+    // O `.screen` preenche 100% da viewport sem margens quando cabe na
+    // tela; quando o frame e maior, o `body` faz o scroll e o `.screen`
+    // cresce para alem da viewport, mantendo a proporcao e centralizado.
+    // Os filhos medem em `cqw`/`cqh` (1% da tela), que escalam junto.
     return [
       'body {',
       '  margin: 0;',
-      '  min-height: 100vh;',
-      '  display: grid;',
-      '  place-items: center;',
+      '  width: 100%;',
+      '  height: 100%;',
+      '  overflow: auto;',
       '}',
       '.screen {',
       '  container-type: size;',
       '  position: relative;',
-      '  width: min(100vw, calc(100vh * ' + ratio + '));',
+      '  min-width: 100vw;',
+      '  min-height: 100vh;',
       '  aspect-ratio: ' + fw + ' / ' + fh + ';',
       '  background: ' + frame.background + ';',
       '  overflow: hidden;',
