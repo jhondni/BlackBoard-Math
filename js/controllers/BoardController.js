@@ -296,14 +296,39 @@ _switchPage(index) {
     this.board.currentPageIndex = index;
 
     const page = this.board.pages[index];
+    const wasLandscape = this.boardView.whiteboard.classList.contains('landscape');
     this.board.isLandscape = page.orientation === 'landscape';
     this.boardView.setOrientation(this.board.isLandscape);
     this.toolbar.setLandscapeActive(this.board.isLandscape);
+
+    // A troca de eixo muda o tamanho da folha, e o `drawingScale` guardado
+    // no BoardView e a densidade do backing store: sem re-reservar o canvas
+    // na dimensao nova ele fica defasado, o anel do raio sai do cursor e a
+    // tinta sai esticada. Reservar limpa o canvas, entao nao pode acontecer
+    // no meio da transicao de 0.4s -- so depois que ela assentar. Com a
+    // transicao desligada (o export faz isso) o tamanho ja e o final e o
+    // trabalho cabe aqui mesmo.
+    const reorientation = this.board.isLandscape !== wasLandscape;
 
     // Limpa canvas e objetos da view
     this.boardView.clearCanvas();
     this.board.clear();
     this.boardView.clearLayer();
+
+    if (reorientation) {
+      if (this.boardView.whiteboard.style.transition === 'none') {
+        // Tamanho final ja valendo: o repinte abaixo usa a densidade certa.
+        this.boardView.resizeDrawingCanvas();
+      } else {
+        setTimeout(() => {
+          const { resized } = this.boardView.resizeDrawingCanvas();
+          if (!resized) return;
+          this.boardView.clearCanvas();
+          const atual = this.board.currentPage;
+          if (atual && atual.drawingData) this.boardView.drawBackground(atual.drawingData);
+        }, 450);
+      }
+    }
 
     const pintado = this.boardView.drawBackground(page.drawingData);
     page.elements.forEach(el => this._restoreFromSerialized(el));

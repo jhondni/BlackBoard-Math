@@ -10,7 +10,12 @@
   mouse, esse primeiro evento pode chegar depois de um salto do ponteiro.
 - **Guia do raio da caneta e da borracha** — um anel translúcido sob o cursor
   marca a área exata que o traço cobre (`penSize`) ou que a borracha apaga
-  (`penSize × 4`), acompanhando o zoom para o contorno continuar fino. A
+  (`penSize × 4`), acompanhando o zoom para o contorno continuar fino. O anel é
+  **ancorado pelo centro no ponto do ponteiro** e reposicionado pelo evento cru
+  de ponteiro (`pointermove`, usando o último ponto do lote coalescido), então
+  fica sempre sob a cruz. A âncora não depende da densidade guardada do canvas:
+  quando a folha muda de eixo (troca de página entre retrato e paisagem) o
+  tamanho do quadro muda fora do zoom, e o anel continua centrado. A
   borracha pinta branco puro sobre uma página que também é branca, então sem
   o anel não dava para ver por onde ela passou. O anel é **efêmero**: não vai
   para o `drawingData`, nem para o histórico, nem para o export.

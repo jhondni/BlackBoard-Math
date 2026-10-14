@@ -53,7 +53,11 @@ export class MouseController {
     // elemento do objeto e um alvo diferente.
     const board = this.boardView.whiteboard;
     board.addEventListener('mousedown', (e) => this.onDown(e));
-    board.addEventListener('mousemove', (e) => this.onMove(e));
+    // `pointermove`, e nao `mousemove`: os eventos de ponteiro trazem o
+    // lote coalescido do movimento, e o ultimo do lote e o ponto que esta
+    // sob a cruz agora. Como `pointermove` e um superconjunto de
+    // `mousemove`, o desenho continua igual e o anel nao fica atras.
+    board.addEventListener('pointermove', (e) => this.onMove(e));
     board.addEventListener('mouseleave', () => {
       this.onUp();
       this.hideDrawGuide();
@@ -92,21 +96,53 @@ export class MouseController {
   }
 
   /**
+   * Ponto do ponteiro em px de lousa, tirado da geometria ATUAL da folha.
+   *
+   * Nao reaproveita `_toBoard`: aquele caminho divide pelo fator de escala
+   * guardado no `BoardView` (`drawingScale`), que fica defasado quando a
+   * folha muda de tamanho sem re-reservar o canvas (a troca de pagina para
+   * outra orientacao fazia exatamente isso). Para a tinta o fator entra e
+   * sai da conta, entao ela continuava sob o cursor; para o anel, que e um
+   * elemento DOM posicionado em px de lousa, o fator defasado empurrava o
+   * circulo para longe da cruz. Aqui a escala vem do retangulo exibido, o
+   * que vale em qualquer zoom ou orientacao.
+   *
+   * @param {MouseEvent|PointerEvent} e
+   * @returns {{x:number, y:number}|null}
+   */
+  _guidePoint(e) {
+    const wb = this.boardView.whiteboard;
+    const rect = wb.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return {
+      x: (e.clientX - rect.left) * (wb.offsetWidth / rect.width),
+      y: (e.clientY - rect.top) * (wb.offsetHeight / rect.height)
+    };
+  }
+
+  /**
    * Reposiciona o anel do raio sob o cursor.
    *
    * A borracha nao pinta nada visivel sobre a pagina clara, entao sem
    * o anel nao ha como ver por onde ela passou. O guia e efemero, logo
    * nada disso vai para o `drawingData` nem para o historico.
    *
-   * @param {number} x - px de lousa
-   * @param {number} y - px de lousa
+   * @param {MouseEvent|PointerEvent} e
    */
-  _updateGuide(x, y) {
+  _updateGuide(e) {
     const tool = this.toolbar.currentTool;
     const radius = this._guideRadius(tool);
     if (radius <= 0) return this.hideDrawGuide();
+    // Ultimo ponto do lote coalescido: e o mais proximo da cruz agora.
+    let point = e;
+    if (typeof e.getCoalescedEvents === 'function') {
+      const batch = e.getCoalescedEvents();
+      if (batch && batch.length) point = batch[batch.length - 1];
+    }
+    const pos = this._guidePoint(point);
+    if (!pos) return;
     this.boardView.showDrawGuide({
-      x, y, radius,
+      x: pos.x, y: pos.y, radius,
       zoom: this.board.zoom,
       color: this._guideColor(tool)
     });
@@ -250,7 +286,7 @@ export class MouseController {
     // Antes do guarda de `isDrawing`: o guia tambem aparece com o mouse
     // apenas sobrevoando a lousa, sem traco em andamento.
     const { x, y } = this._toBoard(e);
-    this._updateGuide(x, y);
+    this._updateGuide(e);
     if (!this.isDrawing) return;
 
     if (this.textBoxDrag) {
