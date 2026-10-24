@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Lousa Virtual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="js/views/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-container {
+      width: 100%;
+      max-width: 400px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-xl);
+      overflow: hidden;
+    }
+    .login-header {
+      padding: 32px 32px 24px;
+      text-align: center;
+    }
+    .login-header h1 {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    .login-header p {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    .login-body {
+      padding: 0 32px 32px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .form-group input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: var(--gradient-1);
+      color: white;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition);
+      margin-bottom: 12px;
+    }
+    .btn-primary:hover {
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+    }
+    .divider {
+      text-align: center;
+      margin: 16px 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      position: relative;
+    }
+    .divider::before,
+    .divider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 40%;
+      height: 1px;
+      background: var(--border);
+    }
+    .divider::before { left: 0; }
+    .divider::after { right: 0; }
+    .link-btn {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .error-msg {
+      background: var(--danger-soft);
+      color: var(--danger);
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .success-msg {
+      background: rgba(0, 196, 140, 0.1);
+      color: var(--success);
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .guest-link {
+      text-align: center;
+      margin-top: 16px;
+    }
+    .guest-link a {
+      color: var(--text-secondary);
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .guest-link a:hover {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-header">
+      <h1>🎨 Lousa Virtual</h1>
+      <p id="form-title">Entre na sua conta</p>
+    </div>
+    <div class="login-body">
+      <div id="error-msg" class="error-msg"></div>
+      <div id="success-msg" class="success-msg"></div>
+      
+      <form id="auth-form">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="password">Senha</label>
+          <input type="password" id="password" required autocomplete="current-password" minlength="6">
+        </div>
+        <button type="submit" class="btn-primary" id="submit-btn">Entrar</button>
+      </form>
+      
+      <div class="divider">ou</div>
+      
+      <button class="btn-secondary" id="toggle-btn">Criar nova conta</button>
+      
+      <div class="guest-link">
+        <a href="index.html">Continuar sem login</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { AuthController } from './js/controllers/AuthController.js';
+    
+    const auth = new AuthController();
+    let isSignUp = false;
+    
+    await auth.init();
+    
+    // Se já estiver logado, redirecionar
+    if (auth.user) {
+      window.location.href = 'index.html';
+    }
+    
+    const form = document.getElementById('auth-form');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const submitBtn = document.getElementById('submit-btn');
+    const toggleBtn = document.getElementById('toggle-btn');
+    const formTitle = document.getElementById('form-title');
+    const errorMsg = document.getElementById('error-msg');
+    const successMsg = document.getElementById('success-msg');
+    
+    toggleBtn.addEventListener('click', () => {
+      isSignUp = !isSignUp;
+      if (isSignUp) {
+        formTitle.textContent = 'Criar nova conta';
+        submitBtn.textContent = 'Cadastrar';
+        toggleBtn.textContent = 'Já tenho conta';
+        passwordInput.autocomplete = 'new-password';
+      } else {
+        formTitle.textContent = 'Entre na sua conta';
+        submitBtn.textContent = 'Entrar';
+        toggleBtn.textContent = 'Criar nova conta';
+        passwordInput.autocomplete = 'current-password';
+      }
+      hideMessages();
+    });
+    
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideMessages();
+      
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = isSignUp ? 'Cadastrando...' : 'Entrando...';
+      
+      try {
+        if (isSignUp) {
+          await auth.signUp(email, password);
+          showSuccess('Cadastro realizado! Verifique seu email para confirmar.');
+        } else {
+          await auth.signIn(email, password);
+          window.location.href = 'index.html';
+        }
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = isSignUp ? 'Cadastrar' : 'Entrar';
+      }
+    });
+    
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      successMsg.style.display = 'none';
+    }
+    
+    function showSuccess(msg) {
+      successMsg.textContent = msg;
+      successMsg.style.display = 'block';
+      errorMsg.style.display = 'none';
+    }
+    
+    function hideMessages() {
+      errorMsg.style.display = 'none';
+      successMsg.style.display = 'none';
+    }
+  </script>
+</body>
+</html>

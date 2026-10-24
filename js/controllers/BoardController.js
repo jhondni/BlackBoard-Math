@@ -40,7 +40,7 @@ export class BoardController {
   #quotaWarned = false;
 
   constructor(board, boardView, toolbar, mathEditor,
-    toolController, mouseController, objectController, selectionView, $) {
+    toolController, mouseController, objectController, selectionView, $, authController = null) {
     this.board = board;
     this.boardView = boardView;
     this.toolbar = toolbar;
@@ -50,6 +50,7 @@ export class BoardController {
     this.objectController = objectController;
     this.selectionView = selectionView;
     this.$ = $;
+    this.authController = authController;
 
     this._thumbs = new WeakMap();
 

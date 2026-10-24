@@ -15,6 +15,7 @@ import { BoardController } from './controllers/BoardController.js';
 import { ToolController } from './controllers/ToolController.js';
 import { ObjectController } from './controllers/ObjectController.js';
 import { MouseController } from './controllers/MouseController.js';
+import { AuthController } from './controllers/AuthController.js';
 
 (function () {
   'use strict';
@@ -47,6 +48,7 @@ import { MouseController } from './controllers/MouseController.js';
     exportBtn: byId('export-btn'),
     zoomInBtn: byId('zoom-in-btn'),
     zoomOutBtn: byId('zoom-out-btn'),
+    authBtn: byId('auth-btn'),
 
     /* Modais */
     equationModal: byId('equation-modal'),
@@ -113,9 +115,11 @@ import { MouseController } from './controllers/MouseController.js';
 
   const mouseController = new MouseController(board, boardView, toolbar, objectController);
   const toolController = new ToolController(board, boardView, toolbar);
+  const authController = new AuthController();
   const boardController = new BoardController(
     board, boardView, toolbar, mathEditor,
-    toolController, mouseController, objectController, selectionView, ui
+    toolController, mouseController, objectController, selectionView, ui,
+    authController
   );
 
   /* ---- Inicializacao ---- */
@@ -128,6 +132,27 @@ import { MouseController } from './controllers/MouseController.js';
   // guia, e ele nao pode ficar orfao na tela.
   toolController.onToolChange = () => mouseController.hideDrawGuide();
 
+  // Inicializar auth e botão
+  authController.init().then(({ user }) => {
+    const authBtn = ui.authBtn;
+    if (authBtn) {
+      if (user) {
+        authBtn.title = `Logado: ${user.email}`;
+        authBtn.onclick = async () => {
+          if (confirm('Deseja sair da conta?')) {
+            await authController.signOut();
+            window.location.reload();
+          }
+        };
+      } else {
+        authBtn.title = 'Fazer login';
+        authBtn.onclick = () => {
+          window.location.href = 'login.html';
+        };
+      }
+    }
+  });
+
   // Disponibiliza o controller no escopo global para debug.
-  window.__lousa = { board, boardController };
+  window.__lousa = { board, boardController, authController };
 })();
