@@ -774,11 +774,12 @@ body.dark-mode #whiteboard::before {
    que engrossaria o contorno junto com o zoom, enquanto o spread do
    `box-shadow` respeita a fracao. */
 .draw-guide {
-  position: absolute;
-  z-index: 3;
+  position: fixed;
+  z-index: 10000;
   pointer-events: none;
   border-radius: 50%;
   box-shadow: inset 0 0 0 1px rgba(124, 124, 142, 0.9);
+  transform: translate(-50%, -50%);
 }
 .draw-guide[hidden] { display: none; }
 

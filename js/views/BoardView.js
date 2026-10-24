@@ -259,21 +259,28 @@ export class BoardView {
   /**
    * Mostra o anel do raio efetivo da ferramenta em `x, y`.
    *
-   * O anel vive dentro do whiteboard, que ja sofre `transform: scale()`,
-   * entao e posicionado em px de lousa e acompanha o zoom sem conversao
-   * de coordenadas. O contorno e um `box-shadow` interno de espessura
-   * `1/zoom` px, para continuar fino na tela em qualquer zoom.
+   * Usa a mesma referencia do traço: #drawing-canvas. Assim o centro
+   * do circulo coincide exatamente com o ponto onde o traço nasce
+   * (ancoragem na cruz).
    *
    * @param {{x:number, y:number, radius:number, zoom:number, color?:string}} guide
    */
   showDrawGuide(guide) {
     const el = this.$.drawGuide;
-    if (!el || !(guide.radius > 0)) return this.hideDrawGuide();
+    const canvas = this.$.canvas;
+    if (!el || !canvas || !(guide.radius > 0)) return this.hideDrawGuide();
     const zoom = guide.zoom > 0 ? guide.zoom : 1;
-    el.style.left = `${guide.x - guide.radius}px`;
-    el.style.top = `${guide.y - guide.radius}px`;
-    el.style.width = `${guide.radius * 2}px`;
-    el.style.height = `${guide.radius * 2}px`;
+    const rect = canvas.getBoundingClientRect();
+    const scale = this.drawingScale || 1;
+    const canvasPx = guide.x * scale;
+    const canvasPy = guide.y * scale;
+    const screenX = rect.left + canvasPx * (rect.width / (canvas.width || 1));
+    const screenY = rect.top + canvasPy * (rect.height / (canvas.height || 1));
+    const screenRadius = guide.radius * zoom;
+    el.style.left = `${screenX}px`;
+    el.style.top = `${screenY}px`;
+    el.style.width = `${screenRadius * 2}px`;
+    el.style.height = `${screenRadius * 2}px`;
     el.style.boxShadow = `inset 0 0 0 ${1 / zoom}px ${guide.color || 'rgba(124, 124, 142, 0.9)'}`;
     el.hidden = false;
   }
