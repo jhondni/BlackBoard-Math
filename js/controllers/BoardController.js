@@ -1202,6 +1202,40 @@ async _captureAllPages() {
     toast._timer = setTimeout(() => toast.classList.remove('show'), 2000);
   }
 
+  exportProjectJSON() {
+    const pages = this.board.pages.map((page, idx) => {
+      const objects = page.objects.map(obj => {
+        if (typeof obj.toJSON === 'function') return obj.toJSON();
+        return {
+          id: obj.id,
+          type: obj.type,
+          x: obj.x,
+          y: obj.y,
+          width: obj.width,
+          height: obj.height,
+          rotation: obj.rotation || 0,
+          latex: obj.latex,
+          text: obj.text,
+          fontSize: obj.fontSize,
+          color: obj.color,
+          src: obj.src,
+          originalSrc: obj.originalSrc,
+          isGraph: obj.isGraph,
+          blurred: obj.blurred
+        };
+      });
+      return { index: idx, objects, drawingData: page.drawingData || null };
+    });
+    return {
+      version: 1,
+      pages,
+      currentPageIndex: this.board.currentPageIndex,
+      zoom: this.board.zoom,
+      landscape: this.board.landscape,
+      library: this.board.library || []
+    };
+  }
+
   /** Acessa paginas/estado para helpers externos. */
   get debug() {
     return { board: this.board };
