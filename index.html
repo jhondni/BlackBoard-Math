@@ -130,6 +130,9 @@
     <button id="save-json-cloud-btn" class="ctrl-btn" data-tooltip="Salvar JSON na nuvem" style="display:none">
       <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
     </button>
+    <button id="load-json-cloud-btn" class="ctrl-btn" data-tooltip="Abrir arquivos da nuvem" style="display:none">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+    </button>
     <div class="ctrl-divider"></div>
     <button id="library-btn" class="ctrl-btn" data-tooltip="Biblioteca">
       <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>
@@ -470,6 +473,28 @@
             <span class="export-card-desc">Salvar como .json</span>
           </div>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ARQUIVOS NA NUVEM -->
+  <div id="cloud-files-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content glass-panel" style="max-width: 520px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon export-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+          </div>
+          <h3>Arquivos salvos na nuvem</h3>
+        </div>
+        <button class="close-modal-btn">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="cloud-files-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto;"></div>
+        <div id="cloud-files-empty" style="text-align: center; color: var(--text-muted); padding: 20px; display: none;">Nenhum arquivo salvo</div>
       </div>
     </div>
   </div>

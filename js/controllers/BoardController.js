@@ -1236,6 +1236,117 @@ async _captureAllPages() {
     };
   }
 
+  openCloudFilesModal() {
+    const modal = document.getElementById('cloud-files-modal');
+    const listEl = document.getElementById('cloud-files-list');
+    const emptyEl = document.getElementById('cloud-files-empty');
+    if (!modal || !listEl) return;
+    if (!this.authController || !this.authController.user) {
+      this._toast('Faça login para acessar os arquivos');
+      return;
+    }
+    modal.classList.remove('hidden');
+    modal.querySelectorAll('.close-modal-btn').forEach(btn => {
+      btn.onclick = () => modal.classList.add('hidden');
+    });
+    const backdrop = modal.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.onclick = () => modal.classList.add('hidden');
+    this._loadCloudFilesList(listEl, emptyEl, modal);
+  }
+
+  async _loadCloudFilesList(listEl, emptyEl, modal) {
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (emptyEl) emptyEl.style.display = 'none';
+    try {
+      const files = await this.authController.loadBoards();
+      if (!files || files.length === 0) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+      }
+      files.forEach(file => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-surface);';
+        const info = document.createElement('div');
+        info.innerHTML = `<div style="font-weight:600;font-size:13px;">${file.title || 'Sem título'}</div><div style="font-size:11px;color:var(--text-muted);">${file.updated_at ? new Date(file.updated_at).toLocaleString() : ''}</div>`;
+        info.style.cursor = 'pointer';
+        info.onclick = async () => {
+          try {
+            const data = await this.authController.loadBoard(file.id);
+            if (data && data.data) {
+              this._importProjectFromCloud(data.data);
+              modal.classList.add('hidden');
+              this._toast('Arquivo carregado da nuvem');
+            }
+          } catch (e) {
+            this._toast('Erro ao carregar: ' + e.message);
+          }
+        };
+        const actions = document.createElement('div');
+        actions.style.display = 'flex';
+        actions.style.gap = '4px';
+        const del = document.createElement('button');
+        del.className = 'ctrl-btn';
+        del.style.width = '28px';
+        del.style.height = '28px';
+        del.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+        del.onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm('Excluir este arquivo da nuvem?')) return;
+          try {
+            await this.authController.deleteBoard(file.id);
+            this._loadCloudFilesList(listEl, emptyEl, modal);
+            this._toast('Arquivo excluído');
+          } catch (e2) {
+            this._toast('Erro ao excluir: ' + e2.message);
+          }
+        };
+        actions.appendChild(del);
+        item.appendChild(info);
+        item.appendChild(actions);
+        listEl.appendChild(item);
+      });
+    } catch (e) {
+      this._toast('Erro ao listar: ' + e.message);
+    }
+  }
+
+  _importProjectFromCloud(project) {
+    if (!project) return;
+    try {
+      if (project.pages) {
+        this.board.pages = [];
+        project.pages.forEach(pageData => {
+          const page = { objects: [], drawingData: pageData.drawingData || null };
+          if (Array.isArray(pageData.objects)) {
+            page.objects = pageData.objects;
+          }
+          this.board.pages.push(page);
+        });
+        this.board.currentPageIndex = project.currentPageIndex || 0;
+        if (this.board.currentPageIndex >= this.board.pages.length) this.board.currentPageIndex = 0;
+        this.board.zoom = project.zoom || 1;
+        this.board.landscape = !!project.landscape;
+        this.board.library = project.library || [];
+        this.boardView.applyZoom(this.board.zoom);
+        this.boardView.setOrientation(this.board.landscape);
+        this.objectController.renderAll();
+        this.renderPagesList();
+        this.renderLibrary();
+        const currentPage = this.board.currentPage;
+        if (currentPage) {
+          this.boardView.clearCanvas();
+          if (currentPage.drawingData) {
+            this.boardView.drawBackground(currentPage.drawingData);
+          }
+        }
+        this._saveState();
+      }
+    } catch (e) {
+      this._toast('Erro ao importar: ' + e.message);
+    }
+  }
+
   /** Acessa paginas/estado para helpers externos. */
   get debug() {
     return { board: this.board };

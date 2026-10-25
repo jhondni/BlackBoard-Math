@@ -136,6 +136,7 @@ import { AuthController } from './controllers/AuthController.js';
   authController.init().then(({ user }) => {
     const authBtn = ui.authBtn;
     const saveJsonCloudBtn = document.getElementById('save-json-cloud-btn');
+    const loadJsonCloudBtn = document.getElementById('load-json-cloud-btn');
     if (authBtn) {
       if (user) {
         authBtn.title = `Logado: ${user.email}`;
@@ -159,12 +160,23 @@ import { AuthController } from './controllers/AuthController.js';
             }
           };
         }
+        if (loadJsonCloudBtn) {
+          loadJsonCloudBtn.style.display = 'flex';
+          loadJsonCloudBtn.onclick = () => {
+            if (typeof boardController.openCloudFilesModal === 'function') {
+              boardController.openCloudFilesModal();
+            } else {
+              alert('Função não disponível');
+            }
+          };
+        }
       } else {
         authBtn.title = 'Fazer login';
         authBtn.onclick = () => {
           window.location.href = 'login.html';
         };
         if (saveJsonCloudBtn) saveJsonCloudBtn.style.display = 'none';
+        if (loadJsonCloudBtn) loadJsonCloudBtn.style.display = 'none';
       }
     }
   });
