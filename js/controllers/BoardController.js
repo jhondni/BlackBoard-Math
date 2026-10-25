@@ -965,13 +965,43 @@ async _captureAllPages() {
     setTimeout(() => URL.revokeObjectURL(link.href), 60000);
   }
 
-  exportJSON() {
+  /**
+   * Monta o projeto no formato unico usado pelo arquivo e pela nuvem.
+   *
+   * `_saveCurrentPage` e obrigatorio: `page.elements` so e atualizado
+   * quando a pagina e trocada/salva, entao sem ele o projeto ia para a
+   * nuvem com o estado anterior da pagina aberta.
+   *
+   * O array `objects` fica de fora de proposito. Ele e apenas um alias de
+   * `elements` em memoria (ver `_saveCurrentPage`); serializar os dois
+   * duplicaria todas as imagens em data URL no payload. Quem le reconstroi
+   * o alias em `_normalizePage`.
+   *
+   * @returns {{version:number, pages:Array<object>, currentPageIndex:number, zoom:number, library:Array<object>}}
+   */
+  _projectData() {
     this._saveCurrentPage();
-    const data = {
+    return {
       version: BoardController.PROJECT_VERSION,
-      pages: this.board.pages,
-      library: this.board.library
+      pages: this.board.pages.map((page) => {
+        const elements = Array.isArray(page.elements)
+          ? page.elements
+          : (Array.isArray(page.objects) ? page.objects : []);
+        return {
+          name: typeof page.name === 'string' ? page.name : undefined,
+          drawingData: page.drawingData || null,
+          elements,
+          orientation: page.orientation === 'landscape' ? 'landscape' : 'portrait'
+        };
+      }),
+      currentPageIndex: this.board.currentPageIndex,
+      zoom: this.board.zoom,
+      library: this.board.library || []
     };
+  }
+
+  exportJSON() {
+    const data = this._projectData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     this._download(blob, 'lousa-virtual.json');
     this.showToast('Projeto salvo!');
@@ -1053,11 +1083,22 @@ async _captureAllPages() {
    * @param {{pages: Array<object>, library?: Array<object>}} data
    */
   _openProject(data) {
-    this.board.pages = data.pages.map((page, i) => this._normalizePage(page, i));
+    const landscapeFallback = data.landscape === true;
+    this.board.pages = data.pages.map((page, i) => this._normalizePage(page, i, landscapeFallback));
     this.board.library = Array.isArray(data.library) ? data.library : [];
+
+    // Projetos novos guardam zoom e pagina corrente. Arquivos antigos nao
+    // trazem esses campos: nesse caso o zoom atual continua valendo e a
+    // pagina 1 e aberta, como antes.
+    const zoom = data.zoom === undefined || data.zoom === null ? NaN : Number(data.zoom);
+    if (Number.isFinite(zoom)) this.toolController.setZoom(zoom);
+
+    let index = Number(data.currentPageIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= this.board.pages.length) index = 0;
+
     this.board.currentPageIndex = -1;
     this.renderLibrary();
-    this._switchPage(0);
+    this._switchPage(index);
   }
 
   /**
@@ -1071,15 +1112,24 @@ async _captureAllPages() {
    * descartada e devolvida como vazia, para o arquivo inteiro continuar
    * abrindo.
    *
+   * Projetos salvos na nuvem antes da unificacao usavam `objects` no lugar
+   * de `elements` e um `landscape` unico na raiz do projeto; os dois
+   * formatos sao aceitos aqui para nao perder o que ja foi salvo.
+   *
    * @param {*} page
    * @param {number} index
+   * @param {boolean} [landscapeFallback] - orientacao da raiz, no formato antigo
    * @returns {object}
    */
-  _normalizePage(page, index) {
+  _normalizePage(page, index, landscapeFallback = false) {
     const base = page && typeof page === 'object' && !Array.isArray(page) ? page : {};
-    const elements = Array.isArray(base.elements)
-      ? base.elements.filter(el => el && typeof el === 'object')
-      : [];
+    const source = Array.isArray(base.elements)
+      ? base.elements
+      : (Array.isArray(base.objects) ? base.objects : []);
+    const elements = source.filter(el => el && typeof el === 'object');
+    const orientation = base.orientation === 'portrait' || base.orientation === 'landscape'
+      ? base.orientation
+      : (landscapeFallback ? 'landscape' : 'portrait');
     return {
       ...base,
       name: typeof base.name === 'string' ? base.name : `Pagina ${index + 1}`,
@@ -1087,7 +1137,7 @@ async _captureAllPages() {
       elements,
       // `objects` e o mesmo array de `elements`, como em `_saveCurrentPage`.
       objects: elements,
-      orientation: base.orientation === 'landscape' ? 'landscape' : 'portrait'
+      orientation
     };
   }
 
@@ -1202,38 +1252,19 @@ async _captureAllPages() {
     toast._timer = setTimeout(() => toast.classList.remove('show'), 2000);
   }
 
+  /**
+   * Serializa o projeto para a nuvem.
+   *
+   * Devolve exatamente o mesmo formato de `exportJSON` -- o de
+   * `_projectData` -- para que o arquivo salvo no Supabase seja lido pelo
+   * mesmo caminho do arquivo local (`_projectError` + `_openProject`).
+   * Antes, este metodo montava um segundo formato (`objects` e `landscape`
+   * na raiz) que o importador da nuvem nao sabia reconstruir.
+   *
+   * @returns {{version:number, pages:Array<object>, currentPageIndex:number, zoom:number, library:Array<object>}}
+   */
   exportProjectJSON() {
-    const pages = this.board.pages.map((page, idx) => {
-      const objects = page.objects.map(obj => {
-        if (typeof obj.toJSON === 'function') return obj.toJSON();
-        return {
-          id: obj.id,
-          type: obj.type,
-          x: obj.x,
-          y: obj.y,
-          width: obj.width,
-          height: obj.height,
-          rotation: obj.rotation || 0,
-          latex: obj.latex,
-          text: obj.text,
-          fontSize: obj.fontSize,
-          color: obj.color,
-          src: obj.src,
-          originalSrc: obj.originalSrc,
-          isGraph: obj.isGraph,
-          blurred: obj.blurred
-        };
-      });
-      return { index: idx, objects, drawingData: page.drawingData || null };
-    });
-    return {
-      version: 1,
-      pages,
-      currentPageIndex: this.board.currentPageIndex,
-      zoom: this.board.zoom,
-      landscape: this.board.landscape,
-      library: this.board.library || []
-    };
+    return this._projectData();
   }
 
   openCloudFilesModal() {
@@ -1242,7 +1273,7 @@ async _captureAllPages() {
     const emptyEl = document.getElementById('cloud-files-empty');
     if (!modal || !listEl) return;
     if (!this.authController || !this.authController.user) {
-      this._toast('Faça login para acessar os arquivos');
+      this.showToast('Faça login para acessar os arquivos');
       return;
     }
     modal.classList.remove('hidden');
@@ -1268,18 +1299,30 @@ async _captureAllPages() {
         const item = document.createElement('div');
         item.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-surface);';
         const info = document.createElement('div');
-        info.innerHTML = `<div style="font-weight:600;font-size:13px;">${file.title || 'Sem título'}</div><div style="font-size:11px;color:var(--text-muted);">${file.updated_at ? new Date(file.updated_at).toLocaleString() : ''}</div>`;
         info.style.cursor = 'pointer';
+        const titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-weight:600;font-size:13px;';
+        // `textContent`, e nao `innerHTML`: o titulo vem de um `prompt`
+        // e nao pode injetar markup na lista.
+        titleEl.textContent = file.title || 'Sem título';
+        const dateEl = document.createElement('div');
+        dateEl.style.cssText = 'font-size:11px;color:var(--text-muted);';
+        const updated = file.updated_at ? new Date(file.updated_at) : null;
+        dateEl.textContent = updated && !Number.isNaN(updated.getTime()) ? updated.toLocaleString() : '';
+        info.appendChild(titleEl);
+        info.appendChild(dateEl);
         info.onclick = async () => {
           try {
             const data = await this.authController.loadBoard(file.id);
-            if (data && data.data) {
-              this._importProjectFromCloud(data.data);
+            if (!data || !data.data) {
+              this.showToast('Arquivo da nuvem vazio ou invalido');
+              return;
+            }
+            if (this._importProjectFromCloud(data.data)) {
               modal.classList.add('hidden');
-              this._toast('Arquivo carregado da nuvem');
             }
           } catch (e) {
-            this._toast('Erro ao carregar: ' + e.message);
+            this.showToast('Erro ao carregar: ' + e.message);
           }
         };
         const actions = document.createElement('div');
@@ -1296,9 +1339,9 @@ async _captureAllPages() {
           try {
             await this.authController.deleteBoard(file.id);
             this._loadCloudFilesList(listEl, emptyEl, modal);
-            this._toast('Arquivo excluído');
+            this.showToast('Arquivo excluído');
           } catch (e2) {
-            this._toast('Erro ao excluir: ' + e2.message);
+            this.showToast('Erro ao excluir: ' + e2.message);
           }
         };
         actions.appendChild(del);
@@ -1307,44 +1350,38 @@ async _captureAllPages() {
         listEl.appendChild(item);
       });
     } catch (e) {
-      this._toast('Erro ao listar: ' + e.message);
+      this.showToast('Erro ao listar: ' + e.message);
     }
   }
 
+  /**
+   * Abre um projeto salvo no Supabase.
+   *
+   * Passa pelo mesmo caminho do arquivo `.json`: validacao, normalizacao
+   * das paginas e reconstrucao dos objetos (`fromJSON` + DOM em
+   * `_restoreFromSerialized`). O import anterior copiava o JSON cru para
+   * `page.objects` e chamava `objectController.renderAll()`, que nao
+   * existe -- a lousa ficava vazia e o erro morria num toast tambem
+   * inexistente (`_toast`, quando o metodo real e `showToast`).
+   *
+   * @param {object} project
+   * @returns {boolean} true se o projeto foi aberto
+   */
   _importProjectFromCloud(project) {
-    if (!project) return;
-    try {
-      if (project.pages) {
-        this.board.pages = [];
-        project.pages.forEach(pageData => {
-          const page = { objects: [], drawingData: pageData.drawingData || null };
-          if (Array.isArray(pageData.objects)) {
-            page.objects = pageData.objects;
-          }
-          this.board.pages.push(page);
-        });
-        this.board.currentPageIndex = project.currentPageIndex || 0;
-        if (this.board.currentPageIndex >= this.board.pages.length) this.board.currentPageIndex = 0;
-        this.board.zoom = project.zoom || 1;
-        this.board.landscape = !!project.landscape;
-        this.board.library = project.library || [];
-        this.boardView.applyZoom(this.board.zoom);
-        this.boardView.setOrientation(this.board.landscape);
-        this.objectController.renderAll();
-        this.renderPagesList();
-        this.renderLibrary();
-        const currentPage = this.board.currentPage;
-        if (currentPage) {
-          this.boardView.clearCanvas();
-          if (currentPage.drawingData) {
-            this.boardView.drawBackground(currentPage.drawingData);
-          }
-        }
-        this._saveState();
-      }
-    } catch (e) {
-      this._toast('Erro ao importar: ' + e.message);
+    const motivo = this._projectError(project);
+    if (motivo) {
+      this.showToast(motivo);
+      return false;
     }
+
+    const total = project.pages.length;
+    const aviso = 'Abrir o projeto da nuvem (' + (total === 1 ? '1 pagina' : total + ' paginas') + ')?'
+      + '\n\nA lousa atual sera substituida e nao podera ser recuperada.';
+    if (!window.confirm(aviso)) return false;
+
+    this._openProject(project);
+    this.showToast('Projeto carregado da nuvem: ' + total + (total === 1 ? ' pagina' : ' paginas'));
+    return true;
   }
 
   /** Acessa paginas/estado para helpers externos. */

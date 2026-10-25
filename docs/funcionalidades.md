@@ -154,6 +154,30 @@ objeto, sem caso especial.
   não no objeto, então nunca há traço órfão; a miniatura da página mostra só esse
   raster, sobre o branco do papel.
 
+### Nuvem (Supabase)
+
+- **Conta opcional** — `login.html` faz cadastro/login com e-mail e senha, e o
+  `AuthController` mantém a sessão. Sem login, a lousa continua local: os botões
+  de nuvem nem aparecem.
+- **Salvar na nuvem** — o botão de nuvem pede um título e grava o projeto na
+  tabela `boards`. O conteúdo é o **mesmo formato do arquivo `.json`**
+  (`_projectData`: `version`, `pages`, `currentPageIndex`, `zoom`, `library`),
+  então não existe mais um segundo serializador só para a nuvem.
+- **Abrir da nuvem** — o botão de pasta lista os projetos do usuário; um clique
+  confirma a substituição da lousa e abre o projeto passando pelo mesmo caminho
+  do import de arquivo: validação (`_projectError`), normalização das páginas
+  (`_normalizePage`), troca de página (`_switchPage`) e reconstrução dos objetos
+  (`fromJSON` + DOM). **A página, o zoom e a orientação salvos são restaurados.**
+- **Projetos antigos continuam abrindo** — o formato anterior da nuvem usava
+  `objects` em vez de `elements` e um `landscape` na raiz do projeto; os dois
+  formatos são aceitos na leitura.
+- **Excluir** — cada item da lista tem o botão de remoção, com confirmação.
+- **Falhas visíveis** — erro ao listar, carregar ou excluir aparece no toast; o
+  modal só fecha quando a abertura termina de fato. O título do arquivo entra na
+  lista por `textContent`, sem `innerHTML`.
+- **Limite atual** — cada salvamento cria um registro novo na tabela; salvar o
+  mesmo título outra vez gera uma segunda entrada (ver pendências).
+
 ### Atalhos de teclado
 | Tecla | Ação |
 | --- | --- |
@@ -176,4 +200,8 @@ objeto, sem caso especial.
 - [ ] **Teclado LaTeX** — paleta de símbolos matemáticos para digitação rápida.
 - [ ] **Formas vetoriais na toolbar** — `ShapeObject` e `SVGRenderer` já existem como arquitetura, falta expor botões (retângulo, círculo, triângulo, linha).
 - [ ] **Export vetorial (SVG)** — `MathRenderer.toSVG()` é placeholder.
-- [ ] **Compartilhamento / backend** — persistência em servidor e colaboração em tempo real (fora do escopo atual do protótipo).
+- [ ] **Sobrescrever projeto na nuvem** — hoje cada salvamento insere um registro
+  novo; falta escolher um projeto existente (ou impor título único) para
+  atualizar em vez de duplicar.
+- [ ] **Colaboração em tempo real** — edição simultânea; a persistência em nuvem
+  já existe, mas não há sincronização ao vivo entre usuários.

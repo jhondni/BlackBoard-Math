@@ -216,6 +216,15 @@ User → Lousa ------> BoardView + SelectionView ──▶ Board.objects
        └── renderizado a partir do Board
 ```
 
+O `AuthController` fica fora do MVC da lousa: ele conversa com o Supabase e é
+consumido pelo `app.js` (login/logout) e pelo `BoardController` (salvar/abrir/
+excluir projetos). A abertura da nuvem termina no mesmo caminho do arquivo,
+`_openProject()` → `_switchPage()` → `_restoreFromSerialized()`.
+
+| Classe | Atributos | Métodos | Relacionamentos |
+| --- | --- | --- | --- |
+| `AuthController` | `- supabase` · `- user` · `- session` | `+ init()` · `+ signUp()` · `+ signIn()` · `+ signOut()` · `+ saveBoard()` · `+ loadBoards()` · `+ loadBoard()` · `+ deleteBoard()` | usa `Supabase` (Auth + tabela `boards`); consumido por `app.js` e `BoardController` |
+
 ## Ciclo de vida de um objeto
 
 ```

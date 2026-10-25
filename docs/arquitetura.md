@@ -154,41 +154,65 @@ objetos — ele não desfaz um traço.
   de texto por clique/arrasto. Ele decide pelo contexto do clique: sobre
   um elemento só `D` e `X` agem; `select`, `text` e `blur` são respondidos pela
   `SelectionView`, que para a propagação no próprio elemento.
+- `AuthController` — cadastro, login, logout e CRUD dos projetos na nuvem
+  (Supabase). A sessão é opcional: sem login, a lousa continua usando só o
+  `localStorage` e os botões de nuvem ficam escondidos.
+
+### Persistência local e nuvem
+
+O `localStorage` (`lousa-state`) é a fonte de verdade do trabalho em andamento.
+O projeto `.json` e a nuvem compartilham o **mesmo formato**, montado por
+`BoardController._projectData()`:
+
+```
+{
+  version,
+  pages: [{ name, drawingData, elements, orientation }],
+  currentPageIndex,
+  zoom,
+  library
+}
+```
+
+- **Arquivo** — `exportJSON()` baixa esse objeto; `importJSON()` valida com
+  `_projectError()` e chama `_openProject()`.
+- **Nuvem** — `exportProjectJSON()` devolve o mesmo objeto; `js/app.js` o envia
+  para `AuthController.saveBoard(title, data)`, que grava em `boards`
+  (`user_id`, `title`, `data`, `updated_at`). O botão de abrir lista os
+  registros do usuário, e o clique passa por `_importProjectFromCloud()`, que
+  repete validação + `_openProject()` + confirmação antes de substituir a lousa.
+- **Abertura** — `_openProject()` normaliza as páginas (`_normalizePage`),
+  restaura zoom e página corrente e chama `_switchPage(index)`. É a
+  `_switchPage` que aplica a orientação da página, repinta a tinta
+  (`drawBackground`) e reconstrói cada objeto via `_restoreFromSerialized()`
+  (`MathObject`/`TextObject`/`ImageObject.fromJSON` + `addObjectElement`).
+- **Compatibilidade** — `_normalizePage()` aceita `objects` no lugar de
+  `elements` e um `landscape` único na raiz, formato usado pelos primeiros
+  projetos salvos na nuvem.
+- **Falha visível** — erros de validação/lista/carga usam `showToast()`; o modal
+  da nuvem só fecha quando o projeto foi realmente aberto.
 
 ## Estrutura de pastas
 
 ```
 lousa-online/
 ├── index.html
-├── js/views/style.css
+├── login.html               # login/cadastro (Supabase Auth)
 ├── .gitignore
 ├── assets/
 │   └── svg/
 ├── docs/                    # esta documentação
 └── js/
     ├── app.js               # ponto de entrada (ES module)
+    ├── config/
+    │   └── supabase.js      # URL e chave pública
     ├── models/   Board.js, BoardObject.js, MathObject.js, TextObject.js,
     │             ImageObject.js, ShapeObject.js
-    ├── views/    BoardView.js, ToolbarView.js, MathEditorView.js, SelectionView.js
+    ├── views/    BoardView.js, ToolbarView.js, MathEditorView.js,
+    │             SelectionView.js, style.css
     ├── controllers/  BoardController.js, ToolController.js,
-    │                 ObjectController.js, MouseController.js
-    └── renderers/   MathRenderer.js, SVGRenderer.js, TextRenderer.js
-```
-
-lousa-online/
-├── index.html
-├── style.css
-├── .gitignore
-├── assets/
-│   └── svg/
-├── docs/                    # esta documentação
-└── js/
-    ├── app.js               # ponto de entrada (ES module)
-    ├── models/   Board.js, BoardObject.js, MathObject.js, TextObject.js,
-    │             ImageObject.js, ShapeObject.js, StrokeObject.js
-    ├── views/    BoardView.js, ToolbarView.js, MathEditorView.js, SelectionView.js
-    ├── controllers/  BoardController.js, ToolController.js,
-    │                 ObjectController.js, MouseController.js
+    │                 ObjectController.js, MouseController.js,
+    │                 AuthController.js
     └── renderers/   MathRenderer.js, SVGRenderer.js, TextRenderer.js
 ```
 
@@ -199,7 +223,9 @@ lousa-online/
 3. Instancia as views e injeta dependências (`mathRenderer`, `selectionView`).
 4. Instancia os controllers e injeta callbacks (`onCommit`, `onDeleteObject`, etc.).
 5. Chama `init()` de cada um para ligar os eventos.
-6. Expõe `window.__lousa = { board, boardController }` para debug.
+6. Inicializa o `AuthController` e, conforme a sessão, mostra os botões de
+   nuvem e liga login/logout.
+7. Expõe `window.__lousa = { board, boardController, authController }` para debug.
 
 ## Execução
 

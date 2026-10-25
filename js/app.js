@@ -133,7 +133,7 @@ import { AuthController } from './controllers/AuthController.js';
   toolController.onToolChange = () => mouseController.hideDrawGuide();
 
   // Inicializar auth e botões
-  authController.init().then(({ user }) => {
+  authController.init().then(({ user } = {}) => {
     const authBtn = ui.authBtn;
     const saveJsonCloudBtn = document.getElementById('save-json-cloud-btn');
     const loadJsonCloudBtn = document.getElementById('load-json-cloud-btn');
@@ -154,9 +154,9 @@ import { AuthController } from './controllers/AuthController.js';
             try {
               const data = boardController.exportProjectJSON();
               await authController.saveBoard(title, data);
-              alert('JSON salvo no Supabase com sucesso!');
+              boardController.showToast('Projeto salvo na nuvem');
             } catch (e) {
-              alert('Erro ao salvar: ' + e.message);
+              boardController.showToast('Erro ao salvar: ' + e.message);
             }
           };
         }
@@ -179,6 +179,8 @@ import { AuthController } from './controllers/AuthController.js';
         if (loadJsonCloudBtn) loadJsonCloudBtn.style.display = 'none';
       }
     }
+  }).catch((err) => {
+    console.error('Falha ao inicializar a autenticacao:', err);
   });
 
   // Disponibiliza o controller no escopo global para debug.

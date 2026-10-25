@@ -1,11 +1,12 @@
 # Stack e Tecnologias
 
-Todas as bibliotecas são carregadas por **CDN** no `index.html` (requer internet).
+Todas as bibliotecas são carregadas por **CDN** em `index.html` e `login.html`
+(requer internet).
 
 | Tecnologia | Função | Onde é usada |
 | --- | --- | --- |
-| **HTML5** | Estrutura da interface e da lousa | `index.html` |
-| **CSS3** | Layout, estilos, ferramentas, responsividade, modo escuro | `style.css` |
+| **HTML5** | Estrutura da interface e da lousa | `index.html`, `login.html` |
+| **CSS3** | Layout, estilos, ferramentas, responsividade, modo escuro | `js/views/style.css` |
 | **JavaScript** | Lógica da aplicação, objetos, eventos, interação | `js/` (ES modules) |
 | **KaTeX** `0.16.9` | Renderização rápida de fórmulas LaTeX | `MathRenderer`, modais, biblioteca |
 | **MathJax** | Suporte a expressões complexas (fallback do KaTeX) | `MathRenderer` (caminho alternativo) |
@@ -15,6 +16,7 @@ Todas as bibliotecas são carregadas por **CDN** no `index.html` (requer interne
 | **jsPDF** `2.5.1` | Geração de PDF | `BoardController` (export PDF) |
 | **ZIP store** (código próprio) | Agrupar as páginas exportadas em PNG num `.zip` | `BoardController` (`_buildZip`) |
 | **localStorage** | Persistência local do projeto | `BoardController` (`lousa-state`) |
+| **Supabase JS** `2` | Autenticação e persistência opcional dos projetos na nuvem | `AuthController`, `login.html`, `index.html` (CDN) |
 
 ## Bibliotecas do navegador / API
 
@@ -28,6 +30,11 @@ Todas as bibliotecas são carregadas por **CDN** no `index.html` (requer interne
   reamostragem de bitmaps
 - `HTMLCanvasElement.toDataURL()` — serialização dos bitmaps em `dataURL`
 - `window.devicePixelRatio` — densidade exigida ao regenerar bitmaps
+- `window.supabase.createClient(url, key)` — cliente de Auth e PostgREST usado
+  pelo `AuthController`. O login fica em página separada (`login.html`); a
+  sessão é lida no `index.html` com `auth.getSession()`
+- `supabase.from('boards')` — CRUD dos projetos na nuvem (`select`, `upsert`,
+  `delete`), sempre filtrado por `user_id`
 
 ## Decisões técnicas
 
@@ -46,6 +53,20 @@ Todas as bibliotecas são carregadas por **CDN** no `index.html` (requer interne
   justifica um quarto script CDN num projeto sem build — daí a escolha de não
   trazer o JSZip. `Blob` + `URL.createObjectURL` entregam o arquivo ao
   download.
+- **A nuvem é opcional e não substitui o `localStorage`** — o projeto continua
+  salvando sozinho no navegador; o Supabase é um destino extra, acionado pelos
+  botões de nuvem (visíveis apenas com sessão ativa). Sem internet ou sem login,
+  a lousa funciona igual.
+- **Arquivo e nuvem compartilham o mesmo formato** — `BoardController._projectData()`
+  monta `{ version, pages, currentPageIndex, zoom, library }`, com `elements`,
+  `orientation` e `drawingData` por página. O export `.json` e o
+  `exportProjectJSON()` (nuvem) usam essa mesma saída, e o import dos dois lados
+  passa por `_projectError()` + `_openProject()`. Antes a nuvem tinha um segundo
+  serializador (`objects`, `landscape` na raiz), que o importador não sabia
+  reconstruir.
+- **Compatibilidade com projetos antigos** — `_normalizePage()` aceita
+  `objects` no lugar de `elements` e um `landscape` único na raiz, então os
+  projetos já salvos no Supabase continuam abrindo.
 
 ### Nitidez: por que `devicePixelRatio` não basta
 
@@ -81,6 +102,10 @@ A nitidez depende, portanto, do bitmap em si, em duas frentes:
 <script src=".../contrib/auto-render.min.js"></script>
 <script src=".../html2canvas.min.js"></script>
 <script src=".../jspdf.umd.min.js"></script>
-<link rel="stylesheet" href="style.css">
+<script src=".../@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="js/views/style.css">
 <script type="module" src="js/app.js"></script>
 ```
+
+O `login.html` carrega o CSS, o Supabase e `js/controllers/AuthController.js`
+diretamente, sem passar por `app.js`.

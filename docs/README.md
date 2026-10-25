@@ -219,6 +219,8 @@ lousa-virtual/
 | **html2canvas** | `1.4.1` | Captura da lousa para exportação | `BoardController` |
 | **jsPDF** | `4.2.1` | Geração de PDF (A4, comprimido) | `BoardController` |
 | **ZIP store** (código próprio) | — | Agrupa as páginas PNG num `.zip` (sem JSZip) | `js/renderers/ZipStore.js` |
+| **localStorage** | — | Persistência local do projeto (`lousa-state`) | `BoardController` |
+| **Supabase** | `2` | Autenticação e persistência opcional dos projetos na nuvem | `AuthController`, `login.html`, `index.html` |
 
 ### Decisões técnicas
 

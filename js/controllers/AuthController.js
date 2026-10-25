@@ -11,7 +11,7 @@ export class AuthController {
   async init() {
     if (!window.supabase) {
       console.error('Supabase JS não carregado');
-      return;
+      return { session: null, user: null };
     }
     this.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     
