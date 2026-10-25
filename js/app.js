@@ -132,9 +132,10 @@ import { AuthController } from './controllers/AuthController.js';
   // guia, e ele nao pode ficar orfao na tela.
   toolController.onToolChange = () => mouseController.hideDrawGuide();
 
-  // Inicializar auth e botão
+  // Inicializar auth e botões
   authController.init().then(({ user }) => {
     const authBtn = ui.authBtn;
+    const saveJsonCloudBtn = document.getElementById('save-json-cloud-btn');
     if (authBtn) {
       if (user) {
         authBtn.title = `Logado: ${user.email}`;
@@ -144,11 +145,26 @@ import { AuthController } from './controllers/AuthController.js';
             window.location.reload();
           }
         };
+        if (saveJsonCloudBtn) {
+          saveJsonCloudBtn.style.display = 'flex';
+          saveJsonCloudBtn.onclick = async () => {
+            const title = prompt('Nome do projeto para salvar no Supabase:');
+            if (!title) return;
+            try {
+              const data = boardController.exportProjectJSON();
+              await authController.saveBoard(title, data);
+              alert('JSON salvo no Supabase com sucesso!');
+            } catch (e) {
+              alert('Erro ao salvar: ' + e.message);
+            }
+          };
+        }
       } else {
         authBtn.title = 'Fazer login';
         authBtn.onclick = () => {
           window.location.href = 'login.html';
         };
+        if (saveJsonCloudBtn) saveJsonCloudBtn.style.display = 'none';
       }
     }
   });
